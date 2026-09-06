@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__ · djangomap</title>
+<style>__TAILWIND__</style>
+<style>
+:root{--model:#7ee787;--view:#79c0ff;--url:#ffa657;--task:#d2a8ff;--signal:#ff7b72;
+ --form:#f0c674;--admin:#56d4dd;--serializer:#a5d6ff;--beat:#ff9ecd;--middleware:#c9a2ff;--command:#9ae6b4}
+body{font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Inter,sans-serif}
+.mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.grid-bg{background:
+  linear-gradient(#141b24 1px,transparent 1px) 0 0/28px 28px,
+  linear-gradient(90deg,#141b24 1px,transparent 1px) 0 0/28px 28px,
+  radial-gradient(1200px 700px at 30% 0%,#111a24,#0b0f14)}
+.card-l{border-left:3px solid var(--c)}
+.card-hot{background:#1d2734!important;border-color:#4a5866!important}
+.wire{fill:none;stroke-width:1.6;opacity:.34;transition:opacity .15s,stroke-width .15s}
+.wire.fk{stroke:var(--model)}.wire.m2m{stroke:var(--model);stroke-dasharray:6 4}
+.wire.o2o{stroke:var(--model);stroke-dasharray:2 3}
+.wire.routes{stroke:var(--url)}.wire.calls{stroke:var(--task);stroke-dasharray:5 4}
+.wire.schedules{stroke:var(--beat);stroke-dasharray:5 4}.wire.uses{stroke:var(--serializer);stroke-dasharray:3 3}
+.wire.queries{stroke:#5c8a6a}.wire.manages{stroke:var(--admin);stroke-dasharray:3 3}
+.wire.listens{stroke:var(--signal);stroke-dasharray:4 3}.wire.inherits{stroke:#4d5b6b;stroke-dasharray:2 5}
+.wire.dim{opacity:.04}.wire.hot{opacity:1;stroke-width:2.4}
+.fl-node rect{transition:.15s}.fl-node{cursor:pointer}
+.fl-node.dim{opacity:.16}.fl-edge.dim{opacity:.05}.fl-edge.hot{opacity:1;stroke-width:2.6}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:#232c38;border-radius:9px}
+::-webkit-scrollbar-track{background:transparent}
+[hidden]{display:none!important}
+/* ---------- responsive ---------- */
+#backdrop{position:fixed;inset:0;background:#000a;z-index:44;display:none}
+body.nav-open #backdrop{display:block}
+@media (max-width:1023px){
+  aside{position:fixed;top:0;bottom:0;left:0;z-index:45;width:15rem;
+    transform:translateX(-100%);transition:transform .22s ease}
+  body.nav-open aside{transform:none}
+  #panel{right:0;left:0;top:auto;bottom:0;width:100%;max-height:62vh;
+    border-radius:14px 14px 0 0;border-left:0;border-right:0;border-bottom:0}
+}
+@media (min-width:1024px){#burger{display:none}#backdrop{display:none!important}}
+@media (max-width:640px){
+  .flowbtn{padding:.4rem .55rem;font-size:10.5px}
+  #flowinfo{display:none}
+  #hint{display:none}
+}
+/* larger touch targets on coarse pointers */
+@media (pointer:coarse){
+  .card{padding-top:.6rem;padding-bottom:.6rem}
+  .chip{padding:.45rem .7rem}
+}
+</style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col bg-[#0b0f14] text-slate-200 text-sm">
+
+<header class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-slate-800
+  bg-[#0e141b] z-30 shrink-0 flex-wrap xl:flex-nowrap">
+  <button id="burger" class="lg:hidden px-2 py-1.5 rounded-lg bg-[#151c25] border border-slate-800
+    text-slate-400 hover:text-slate-100 shrink-0" aria-label="Toggle sidebar">☰</button>
+  <h1 class="font-semibold text-[14.5px] shrink-0">__TITLE__</h1>
+  <span class="mono text-[11px] text-slate-600 truncate max-w-[160px] xl:max-w-[260px] hidden sm:inline">__ROOT__</span>
+  <nav class="flex gap-1 sm:ml-2 bg-[#151c25] p-1 rounded-lg border border-slate-800 shrink-0">
+    <button data-tab="apps" class="tabbtn px-3 py-1 rounded-md text-xs font-medium transition">Apps</button>
+    <button data-tab="flow" class="tabbtn px-3 py-1 rounded-md text-xs font-medium transition">Flow</button>
+    <button data-tab="health" class="tabbtn px-3 py-1 rounded-md text-xs font-medium transition">
+      Health <span id="tabBadge" class="ml-1 px-1.5 rounded text-[10px] bg-rose-500/20 text-rose-300"></span></button>
+  </nav>
+  <div class="flex-1 min-w-[8px]"></div>
+  <input id="q" type="search" placeholder="search…"
+    class="order-last sm:order-none w-full sm:w-36 md:w-44 sm:focus:w-56 transition-all
+           px-2.5 py-1.5 rounded-lg bg-[#151c25] border border-slate-800
+           text-xs outline-none focus:border-sky-600 placeholder:text-slate-600">
+  <button id="kindsBtn" class="2xl:hidden px-2.5 py-1.5 rounded-lg bg-[#151c25] border border-slate-800
+    text-xs text-slate-400 hover:text-slate-100 transition shrink-0">Kinds</button>
+  <div id="chips" class="hidden 2xl:flex gap-1 flex-wrap justify-end max-w-[42vw]"></div>
+  <button id="fit" class="px-2.5 py-1.5 rounded-lg bg-[#151c25] border border-slate-800 text-xs
+    text-slate-400 hover:text-slate-100 hover:border-slate-600 transition shrink-0">Fit</button>
+  <button id="foldAll" class="hidden sm:block px-2.5 py-1.5 rounded-lg bg-[#151c25] border
+    border-slate-800 text-xs text-slate-400 hover:text-slate-100 hover:border-slate-600
+    transition shrink-0">Collapse</button>
+</header>
+
+<div id="backdrop"></div>
+<main class="flex-1 flex min-h-0 relative">
+  <aside class="w-60 lg:w-56 shrink-0 border-r border-slate-800 bg-[#0e141b] overflow-auto p-3">
+    <div id="kindsPanel" class="2xl:hidden">
+      <h2 class="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-2">Kinds</h2>
+      <div id="chipsMobile" class="flex flex-wrap gap-1 mb-4"></div>
+    </div>
+    <h2 class="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-2">Apps</h2>
+    <div id="apps"></div>
+    <h2 class="text-[10px] uppercase tracking-widest text-slate-600 font-bold mt-5 mb-2">Project</h2>
+    <div id="settings" class="space-y-1"></div>
+    <h2 class="text-[10px] uppercase tracking-widest text-slate-600 font-bold mt-5 mb-2">Stats</h2>
+    <div id="stats"></div>
+    <h2 class="text-[10px] uppercase tracking-widest text-slate-600 font-bold mt-5 mb-2">Relations</h2>
+    <div id="legend" class="text-[11px] text-slate-500 leading-7"></div>
+  </aside>
+
+  <!-- ============ TAB: APPS ============ -->
+  <section id="tab-apps" class="flex-1 relative overflow-hidden grid-bg cursor-grab">
+    <div id="world" class="absolute top-0 left-0 origin-top-left will-change-transform">
+      <svg id="wires" class="absolute top-0 left-0 overflow-visible pointer-events-none z-[1]"></svg>
+    </div>
+    <div id="hint" class="absolute left-3 bottom-3 text-[10.5px] text-slate-600 bg-[#0e141bcc] border
+      border-slate-800 rounded-lg px-3 py-1.5 z-20 hidden md:block">
+      drag board header · scroll = zoom · <kbd class="bg-slate-800 px-1 rounded">F</kbd> fit ·
+      <kbd class="bg-slate-800 px-1 rounded">Esc</kbd> clear
+    </div>
+  </section>
+
+  <!-- ============ TAB: FLOW ============ -->
+  <section id="tab-flow" class="flex-1 relative overflow-hidden grid-bg cursor-grab" hidden>
+    <div class="absolute left-2 sm:left-3 top-2 sm:top-3 z-20 flex flex-wrap gap-1 max-w-[calc(100%-1rem)]
+      bg-[#0e141bee] border border-slate-800 rounded-lg p-1">
+      <button data-flow="request" class="flowbtn px-3 py-1.5 rounded-md text-xs transition">Request Lifecycle</button>
+      <button data-flow="apps" class="flowbtn px-3 py-1.5 rounded-md text-xs transition">App Dependencies</button>
+      <button data-flow="celery" class="flowbtn px-3 py-1.5 rounded-md text-xs transition">Celery Pipeline</button>
+      <button data-flow="data" class="flowbtn px-3 py-1.5 rounded-md text-xs transition">Data Model</button>
+    </div>
+    <div id="flowinfo" class="absolute right-3 top-3 z-20 max-w-[280px] hidden lg:block text-[11px] text-slate-500
+      bg-[#0e141bee] border border-slate-800 rounded-lg px-3 py-2 leading-relaxed"></div>
+    <svg id="flow" class="w-full h-full"><g id="flowRoot"></g></svg>
+  </section>
+
+  <!-- ============ TAB: HEALTH ============ -->
+  <section id="tab-health" class="flex-1 overflow-auto bg-[#0b0f14] p-3 sm:p-5" hidden>
+    <div id="healthBody" class="max-w-5xl mx-auto"></div>
+  </section>
+
+  <!-- ============ DETAIL PANEL ============ -->
+  <div id="panel" class="fixed right-3 top-14 w-[330px] max-h-[calc(100vh-4.5rem)] overflow-auto
+    bg-[#0e141bfa] border border-slate-700 rounded-xl p-4 z-40 shadow-2xl backdrop-blur hidden"></div>
+</main>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const NS='http://www.w3.org/2000/svg';
+const COLORS={model:'#7ee787',view:'#79c0ff',url:'#ffa657',task:'#d2a8ff',signal:'#ff7b72',
+  form:'#f0c674',admin:'#56d4dd',serializer:'#a5d6ff',beat:'#ff9ecd',middleware:'#c9a2ff',command:'#9ae6b4'};
+const ORDER=['url','view','serializer','form','model','task','beat','signal','middleware','admin','command'];
+const TITLE={model:'Models',view:'Views',url:'URLs',task:'Celery Tasks',beat:'Beat Schedule',
+  signal:'Signals',serializer:'Serializers',form:'Forms',admin:'Admin',
+  middleware:'Middleware',command:'Management Commands'};
+const EDGE_LABEL={fk:'ForeignKey',m2m:'ManyToMany',o2o:'OneToOne',routes:'URL → View',
+  calls:'task.delay()',schedules:'beat schedule',uses:'uses',queries:'ORM query',
+  manages:'admin registers',listens:'signal receiver',inherits:'inherits'};
+const APPHUE=['#79c0ff','#7ee787','#ffa657','#d2a8ff','#ff9ecd','#56d4dd','#f0c674','#ff7b72','#a5d6ff','#9ae6b4'];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const byId=Object.fromEntries(D.nodes.map(n=>[n.id,n]));
+const edges=D.edges.filter(e=>byId[e.source]&&byId[e.target]);
+const apps=D.apps.filter(a=>D.nodes.some(n=>n.app===a));
+const appColor={}; apps.forEach((a,i)=>appColor[a]=APPHUE[i%APPHUE.length]);
+const nodesOf=k=>D.nodes.filter(n=>n.kind===k);
+
+/* ================= health + source links ================= */
+const H=D.health||null, LINKS=D.links||{};
+const SEV={error:'#ff7b72',warn:'#f0c674',info:'#79c0ff'};
+const SEVBG={error:'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  warn:'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  info:'bg-sky-500/15 text-sky-300 border-sky-500/30'};
+const issuesOf=id=>(H&&H.by_node[id])||[];
+function worstOf(id){const is=issuesOf(id);
+  return is.some(i=>i.severity==='error')?'error':is.some(i=>i.severity==='warn')?'warn':
+         is.length?'info':null;}
+function srcLinks(n){
+  const out=[];
+  const abs=(D.root+'/'+n.file).replace(/\/+/g,'/');
+  if(LINKS.editor&&LINKS.editor!=='none'){
+    const scheme=LINKS.editor==='pycharm'?'jetbrains://pycharm/navigate/reference?path=':
+      (LINKS.editor==='vscode-insiders'?'vscode-insiders://file':'vscode://file');
+    const href=LINKS.editor==='pycharm'?scheme+abs+':'+n.line:`${scheme}${abs}:${n.line}`;
+    out.push(`<a href="${esc(href)}" class="inline-block mono text-[10px] px-2 py-1 rounded
+      bg-slate-800 hover:bg-slate-700 text-slate-300 mr-1.5">open in editor</a>`);}
+  if(LINKS.repo_url){
+    const href=`${LINKS.repo_url}/blob/${LINKS.branch||'main'}/${n.file}#L${n.line}`;
+    out.push(`<a href="${esc(href)}" target="_blank" rel="noopener"
+      class="inline-block mono text-[10px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700
+      text-sky-300">view on remote ↗</a>`);}
+  return out.join('');}
+
+
+/* ================= sidebar ================= */
+const S=D.settings||{};
+document.getElementById('settings').innerHTML=[
+  ['apps',apps.length],['AUTH_USER_MODEL',S.AUTH_USER_MODEL],['TIME_ZONE',S.TIME_ZONE],
+  ['DEBUG',S.DEBUG],['broker',(S.CELERY_BROKER_URL||'').replace(/^\w+:\/\//,'')],
+  ['middleware',(S.MIDDLEWARE||[]).length||null],['installed',(S.INSTALLED_APPS||[]).length||null],
+].filter(r=>r[1]!==undefined&&r[1]!==null&&r[1]!=='').map(([k,v])=>
+  `<div class="flex justify-between gap-2 text-[11px] text-slate-500">
+     <span>${esc(k)}</span><b class="mono text-slate-300 font-semibold truncate max-w-[110px]"
+     title="${esc(v)}">${esc(v)}</b></div>`).join('');
+document.getElementById('stats').innerHTML=Object.entries(D.stats).map(([k,v])=>
+  `<div class="flex justify-between text-[11.5px] text-slate-500 py-0.5">
+     <span>${esc(k)}</span><b class="mono text-slate-200 font-semibold">${v}</b></div>`).join('');
+document.getElementById('legend').innerHTML=[
+  ['fk','#7ee787',0],['m2m','#7ee787',1],['routes','#ffa657',0],['calls','#d2a8ff',1],
+  ['schedules','#ff9ecd',1],['queries','#5c8a6a',0],['uses','#a5d6ff',1],
+  ['listens','#ff7b72',1],['manages','#56d4dd',1],['inherits','#4d5b6b',1],
+].filter(([k])=>edges.some(e=>e.kind===k)).map(([k,c,d])=>
+  `<div><i class="inline-block w-5 align-middle mr-2" style="border-top:2px ${d?'dashed':'solid'} ${c}"></i>${EDGE_LABEL[k]}</div>`).join('');
+
+const appsBox=document.getElementById('apps');
+apps.forEach(a=>{const st=(D.app_stats||{})[a]||{};
+  const r=document.createElement('div');
+  r.className='flex items-center gap-2 text-[12.5px] text-slate-400 px-2 py-1.5 rounded-md '+
+    'cursor-pointer hover:bg-[#151d26] hover:text-slate-100 transition';
+  r.innerHTML=`<span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${appColor[a]}"></span>
+    <span class="truncate">${esc(a)}</span>
+    <span class="ml-auto mono text-[10.5px] text-slate-600">${st.total||0}</span>`;
+  r.onclick=()=>{onApp.has(a)?onApp.delete(a):onApp.add(a);r.classList.toggle('opacity-30');refresh();saveHash();};
+  appsBox.appendChild(r);});
+
+/* ================= responsive shell ================= */
+const mqDesktop=matchMedia('(min-width:1024px)');
+const isTouch=matchMedia('(pointer:coarse)').matches;
+function closeNav(){document.body.classList.remove('nav-open');}
+document.getElementById('burger').onclick=()=>document.body.classList.toggle('nav-open');
+document.getElementById('backdrop').onclick=closeNav;
+mqDesktop.addEventListener('change',()=>{closeNav();relayoutAll();});
+// "Kinds" opens the sidebar on small screens where the chip row is hidden
+document.getElementById('kindsBtn').onclick=()=>{
+  document.body.classList.add('nav-open');
+  document.getElementById('kindsPanel').scrollIntoView({behavior:'smooth',block:'nearest'});};
+
+/* ================= TAB 1: app boards ================= */
+const world=document.getElementById('world'), stageA=document.getElementById('tab-apps'),
+      svg=document.getElementById('wires'), panel=document.getElementById('panel');
+const boards={}, cardEl={};
+
+function subtitle(n){const m=n.meta||{};
+  if(n.kind==='url')return (m.handler||'').replace('.as_view()','')+(m.name?` · ${m.name}`:'');
+  if(n.kind==='model')return (m.fields||[]).length+' fields'+(m.meta_opts&&m.meta_opts.ordering?' · ordered':'');
+  if(n.kind==='beat')return m.schedule||'';
+  if(n.kind==='task'){const o=m.task_opts||{};
+    return (m.args&&m.args.length?'('+m.args.join(', ')+')':'()')+(o.queue?` · q:${o.queue}`:'');}
+  if(n.kind==='view')return (m.http&&m.http.length?m.http.join('/').toUpperCase()+' · ':'')+(m.bases||[]).join(', ');
+  if(n.kind==='signal')return (m.signal||'')+(m.sender?` ← ${m.sender}`:'');
+  return (m.bases||[]).join(', ')||m.doc||'';}
+function badge(n){const m=n.meta||{};
+  if(n.kind==='model')return (m.fields||[]).length;
+  if(n.kind==='view')return m.fbv?'fn':'cbv';
+  if(n.kind==='url')return m.include?'inc':(m.router?'api':'');
+  if(n.kind==='task'&&(m.task_opts||{}).bind)return 'bind';
+  return '';}
+
+apps.forEach(app=>{
+  const col=appColor[app], list=D.nodes.filter(n=>n.app===app), st=(D.app_stats||{})[app]||{};
+  const b=document.createElement('div');
+  b.className='board absolute rounded-xl border border-slate-800 z-[2] shadow-2xl '+
+    'bg-gradient-to-b from-[#121821] to-[#0f151d] transition-opacity';
+  b.dataset.app=app;
+  b.innerHTML=`<div class="bhead flex items-center gap-2 px-3 py-2.5 border-b border-slate-800
+        rounded-t-xl cursor-grab select-none" style="background:linear-gradient(90deg,${col}18,transparent)">
+      <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${col}"></span>
+      <span class="mono text-[13px] font-semibold" style="color:${col}">${esc(app)}</span>
+      <span class="ml-auto mono text-[10px] text-slate-600">${list.length} · ${st.loc||0} loc</span>
+      <span class="fold text-slate-600 hover:text-slate-200 cursor-pointer px-0.5">▾</span></div>
+    <div class="bbody p-2.5 flex flex-col gap-3"></div>`;
+  const body=b.querySelector('.bbody');
+  ORDER.forEach(kind=>{
+    const items=list.filter(n=>n.kind===kind); if(!items.length)return;
+    const g=document.createElement('div'); g.className='group'; g.dataset.kind=kind;
+    g.innerHTML=`<div class="flex items-center gap-2 text-[9.5px] uppercase tracking-wider
+        font-bold mb-1.5 px-0.5" style="color:${COLORS[kind]}aa">${TITLE[kind]}
+        <span class="text-slate-600">${items.length}</span>
+        <span class="flex-1 h-px bg-slate-800"></span></div>
+      <div class="cards flex flex-col gap-1.5"></div>`;
+    const cw=g.querySelector('.cards');
+    items.forEach(n=>{
+      const c=document.createElement('div');
+      c.className='card card-l relative bg-[#161d27] border border-[#222b36] rounded-lg '+
+        'px-2.5 py-1.5 cursor-pointer transition hover:bg-[#1b2430] hover:border-slate-600 overflow-hidden';
+      c.style.setProperty('--c',COLORS[kind]);
+      const sub=subtitle(n), bg=badge(n);
+      const wq=worstOf(n.id), nis=issuesOf(n.id).length;
+      c.innerHTML=`<div class="mono text-[12.5px] text-slate-200 truncate pr-6">${
+          wq?`<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle"
+            style="background:${SEV[wq]}" title="${nis} issue(s)"></span>`:''}${esc(n.label)}</div>
+        ${sub?`<div class="mono text-[10.5px] text-slate-500 truncate mt-0.5">${esc(sub)}</div>`:''}
+        ${bg!==''&&bg!==0?`<div class="absolute top-1.5 right-1.5 mono text-[9px] text-slate-500
+          bg-[#0e141b] rounded px-1.5">${esc(bg)}</div>`:''}`;
+      c.onclick=ev=>{ev.stopPropagation();select(n.id);};
+      cw.appendChild(c); cardEl[n.id]=c;});
+    body.appendChild(g);});
+  b.querySelector('.fold').onclick=ev=>{ev.stopPropagation();b.classList.toggle('folded');
+    b.querySelector('.bbody').hidden=b.classList.contains('folded');
+    b.querySelector('.fold').textContent=b.classList.contains('folded')?'▸':'▾';drawWires();};
+  b.querySelector('.bhead').addEventListener('pointerdown',e=>dragBoard(e,app));
+  world.appendChild(b); boards[app]=b;});
+
+const pos={}; let BW=290; const GAP=30;
+function calcBW(){
+  const w=(stageA.getBoundingClientRect().width||window.innerWidth)-40;
+  BW = w<420 ? Math.max(230,w-16) : (w<700?272:290);
+  return BW;}
+calcBW();
+function autoLayout(){
+  calcBW();
+  const avail=(stageA.getBoundingClientRect().width||1200)-40;
+  let cols=Math.max(1,Math.floor(avail/(BW+GAP)));
+  cols=Math.min(cols,apps.length);
+  const h=new Array(cols).fill(0);
+  [...apps].sort((a,b)=>boards[b].offsetHeight-boards[a].offsetHeight).forEach(app=>{
+    const c=h.indexOf(Math.min(...h));
+    pos[app]={x:c*(BW+GAP),y:h[c]}; h[c]+=boards[app].offsetHeight+GAP;});}
+function place(){apps.forEach(a=>{const b=boards[a];
+  b.style.width=BW+'px';b.style.left=pos[a].x+'px';b.style.top=pos[a].y+'px';});}
+apps.forEach(a=>boards[a].style.width=BW+'px'); autoLayout(); place();
+
+const wireEl=edges.map(e=>{const p=document.createElementNS(NS,'path');
+  p.setAttribute('class','wire '+e.kind);svg.appendChild(p);return p;});
+function offsetIn(el,root){let x=0,y=0,n=el;
+  while(n&&n!==root){x+=n.offsetLeft;y+=n.offsetTop;n=n.offsetParent;}return [x,y];}
+function rectOf(id){const c=cardEl[id];if(!c)return null;
+  const app=byId[id].app,b=boards[app];
+  if(b.hidden)return null;
+  if(b.classList.contains('folded')||c.hidden)return {x:pos[app].x,y:pos[app].y,w:BW,h:b.offsetHeight};
+  const [ox,oy]=offsetIn(c,b);
+  return {x:pos[app].x+ox,y:pos[app].y+oy,w:c.offsetWidth,h:c.offsetHeight};}
+function boardBox(app){const b=boards[app];
+  return {x:pos[app].x,y:pos[app].y,w:BW,h:b.offsetHeight};}
+function drawWires(){
+  let mx=0,my=0;
+  // channel counter so parallel wires don't overlap
+  const chan={};
+  edges.forEach((e,i)=>{
+    const a=rectOf(e.source),b=rectOf(e.target);
+    if(!a||!b){wireEl[i].setAttribute('d','');return;}
+    const sApp=byId[e.source].app, tApp=byId[e.target].app;
+    const A=boardBox(sApp), B=boardBox(tApp);
+    const y1=a.y+a.h/2, y2=b.y+b.h/2;
+    let d;
+    if(sApp===tApp){
+      // same app: exit at the board edge and arc in the margin, never across cards
+      const k='s'+sApp; chan[k]=(chan[k]||0)+1;
+      const off=18+((chan[k]-1)%4)*11;
+      const sx=A.x+A.w, ex=A.x+A.w, bx=sx+off;
+      d=`M${a.x+a.w},${y1} L${sx},${y1} C${bx+20},${y1} ${bx+20},${y2} ${ex},${y2} L${b.x+b.w},${y2}`;
+      mx=Math.max(mx,bx+24);
+    }else{
+      // across apps: leave both board edges, arc through the gutter between them
+      const right = B.x >= A.x + A.w - 4;
+      const left  = B.x + B.w <= A.x + 4;
+      if(right||left){
+        const sx = right ? A.x+A.w : A.x;
+        const ex = right ? B.x : B.x+B.w;
+        const sCard = right ? a.x+a.w : a.x;
+        const eCard = right ? b.x : b.x+b.w;
+        const dx=Math.max(26,Math.abs(ex-sx)*.5)*(right?1:-1);
+        d=`M${sCard},${y1} L${sx},${y1} C${sx+dx},${y1} ${ex-dx},${y2} ${ex},${y2} L${eCard},${y2}`;
+        mx=Math.max(mx,sx,ex,sCard,eCard);
+      }else{
+        // boards share a column -> route around via the outer side
+        const down = B.y > A.y;
+        const sy = down ? A.y+A.h : A.y, ey = down ? B.y : B.y+B.h;
+        const gx = Math.max(A.x+A.w, B.x+B.w)+24;
+        const k='v'+Math.round(gx); chan[k]=(chan[k]||0)+1;
+        const gx2=gx+((chan[k]-1)%4)*11;
+        d=`M${a.x+a.w},${y1} L${gx2},${y1} L${gx2},${y2} L${b.x+b.w},${y2}`;
+        mx=Math.max(mx,gx2+20);
+      }
+    }
+    wireEl[i].setAttribute('d',d);
+    my=Math.max(my,y1,y2);});
+  const w=Math.max(mx,...apps.map(a=>pos[a].x+BW))+90;
+  const h=Math.max(my,...apps.map(a=>boards[a].hidden?0:pos[a].y+boards[a].offsetHeight))+80;
+  svg.setAttribute('width',w);svg.setAttribute('height',h);
+  world.style.width=w+'px';world.style.height=h+'px';}
+
+let view={x:40,y:30,k:1};
+const applyA=()=>world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.k})`;
+stageA.addEventListener('wheel',e=>{e.preventDefault();
+  const s=Math.exp(-e.deltaY*0.0013),k=Math.min(2.2,Math.max(.14,view.k*s));
+  const r=stageA.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  view.x=mx-(mx-view.x)*(k/view.k);view.y=my-(my-view.y)*(k/view.k);view.k=k;applyA();},{passive:false});
+let pan=null,bdrag=null;
+stageA.addEventListener('pointerdown',e=>{if(e.target.closest('.board'))return;
+  pan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};stageA.classList.add('cursor-grabbing');});
+addEventListener('pointermove',e=>{
+  if(bdrag){pos[bdrag.app].x=bdrag.px+(e.clientX-bdrag.x)/view.k;
+    pos[bdrag.app].y=bdrag.py+(e.clientY-bdrag.y)/view.k;place();drawWires();}
+  else if(pan){view.x=pan.vx+e.clientX-pan.x;view.y=pan.vy+e.clientY-pan.y;applyA();}
+  else if(fpan){fv.x=fpan.vx+e.clientX-fpan.x;fv.y=fpan.vy+e.clientY-fpan.y;applyF();}});
+addEventListener('pointerup',()=>{pan=null;bdrag=null;fpan=null;stageA.classList.remove('cursor-grabbing');});
+function dragBoard(e,app){if(e.target.classList.contains('fold'))return;
+  bdrag={app,x:e.clientX,y:e.clientY,px:pos[app].x,py:pos[app].y};
+  boards[app].style.zIndex=10;e.stopPropagation();}
+function fitApps(){const w=parseFloat(world.style.width),h=parseFloat(world.style.height);
+  const r=stageA.getBoundingClientRect();
+  const kw=(r.width-30)/w, kh=(r.height-40-panelOverlap())/h;
+  view.k = r.width<640 ? Math.min(kw,1) : Math.max(Math.min(kw,kh,1.1),Math.min(kw,0.62));
+  view.x=Math.max(12,(r.width-w*view.k)/2);view.y=16;applyA();}
+function relayoutAll(){autoLayout();place();drawWires();
+  if(tab==='apps')fitApps(); else if(tab==='flow'){paintFlow();fitFlow();}}
+
+/* ================= filters ================= */
+const kinds=[...new Set(D.nodes.map(n=>n.kind))].sort((a,b)=>ORDER.indexOf(a)-ORDER.indexOf(b));
+const onKind=new Set(kinds), onApp=new Set(apps);
+const chips=document.getElementById('chips');
+const chipsM=document.getElementById('chipsMobile');
+const chipEls={};
+kinds.forEach(k=>{
+  chipEls[k]=[];
+  [chips,chipsM].forEach(host=>{
+    const b=document.createElement('button');
+    b.className='chip px-2.5 py-1 rounded-md text-[11px] border border-slate-800 bg-[#1c2530] '+
+      'text-slate-200 transition whitespace-nowrap';
+    b.innerHTML=`<span class="inline-block w-1.5 h-1.5 rounded-sm mr-1.5" style="background:${COLORS[k]}"></span>${k}`;
+    b.onclick=()=>{const on=onKind.has(k); on?onKind.delete(k):onKind.add(k);
+      chipEls[k].forEach(x=>x.classList.toggle('opacity-30',on));refresh();saveHash();};
+    host.appendChild(b); chipEls[k].push(b);});});
+document.getElementById('q').oninput=refresh;
+
+let sel=null;
+const nbr=id=>{const s=new Set([id]);
+  edges.forEach(e=>{if(e.source===id)s.add(e.target);if(e.target===id)s.add(e.source);});return s;};
+function refresh(){
+  const term=document.getElementById('q').value.trim().toLowerCase();
+  const hot=sel?nbr(sel):null, shown=new Set();
+  D.nodes.forEach(n=>{const c=cardEl[n.id];if(!c)return;
+    let vis=onKind.has(n.kind)&&onApp.has(n.app);
+    if(vis&&term)vis=(n.label+' '+n.file+' '+JSON.stringify(n.meta)).toLowerCase().includes(term);
+    c.hidden=!vis;
+    c.classList.toggle('opacity-20',!!(vis&&hot&&!hot.has(n.id)));
+    c.classList.toggle('card-hot',!!(vis&&hot&&hot.has(n.id)&&n.id!==sel));
+    c.classList.toggle('ring-1',n.id===sel); c.classList.toggle('ring-white',n.id===sel);
+    if(vis)shown.add(n.id);});
+  apps.forEach(a=>{let any=false;
+    boards[a].querySelectorAll('.group').forEach(g=>{
+      const alive=[...g.querySelectorAll('.card')].some(c=>!c.hidden);
+      g.hidden=!alive; any=any||alive;});
+    boards[a].hidden=!any;
+    boards[a].classList.toggle('opacity-25',!!(hot&&![...boards[a].querySelectorAll('.card')]
+      .some(c=>!c.hidden&&(c.classList.contains('card-hot')||c.classList.contains('ring-1')))));});
+  edges.forEach((e,i)=>{const ok=shown.has(e.source)&&shown.has(e.target);
+    const on=hot&&(e.source===sel||e.target===sel);
+    wireEl[i].classList.toggle('dim',!ok||!!(hot&&!on));
+    wireEl[i].classList.toggle('hot',!!(ok&&on));});
+  requestAnimationFrame(drawWires);
+  if(tab==='flow')paintFlow();}
+
+/* ================= detail panel ================= */
+function row(k,v){return `<tr><td class="mono text-[11.5px] py-1 border-t border-slate-800">${esc(k)}</td>
+  <td class="mono text-[11.5px] py-1 border-t border-slate-800 text-right text-slate-500">${v}</td></tr>`;}
+function tags(a){return a.map(x=>`<span class="inline-block mono text-[10px] px-1.5 py-0.5 rounded
+  bg-slate-800 text-slate-400 mr-1 mb-1">${esc(x)}</span>`).join('');}
+function h4(t){return `<h4 class="text-[9.5px] uppercase tracking-wider text-slate-600 font-bold mt-3 mb-1">${t}</h4>`;}
+
+function select(id){
+  sel=(sel===id)?null:id;
+  if(!sel){panel.classList.add('hidden');refresh();return;}
+  const n=byId[sel],m=n.meta||{},col=COLORS[n.kind];
+  let h=`<span class="float-right text-slate-600 hover:text-slate-200 cursor-pointer"
+      onclick="select(null)">✕</span>
+    <h3 class="mono text-[14.5px] font-semibold mb-0.5" style="color:${col}">${esc(n.label)}</h3>
+    <div class="mono text-[10.5px] text-slate-600 break-all">${esc(n.kind)} ·
+      <span style="color:${appColor[n.app]}">${esc(n.app)}</span> · ${esc(n.file)}:${n.line}${
+      n.endline&&n.endline>n.line?`-${n.endline}`:''}</div>`;
+  const sl=srcLinks(n); if(sl)h+=`<div class="mt-2">${sl}</div>`;
+  if(m.doc)h+=`<div class="text-[12px] text-slate-400 leading-relaxed my-2.5">${esc(m.doc)}</div>`;
+  const nis=issuesOf(sel);
+  if(nis.length)h+=h4(`Issues (${nis.length})`)+nis.map(i=>
+    `<div class="flex gap-2 items-start text-[11px] mb-1.5 px-2 py-1.5 rounded border ${SEVBG[i.severity]}">
+       <span class="mono text-[9px] uppercase shrink-0 mt-0.5">${esc(i.severity)}</span>
+       <span>${esc(i.message)}${i.detail?` <span class="mono opacity-70">${esc(i.detail)}</span>`:''}
+       <span class="mono opacity-50 block text-[9.5px]">${esc(i.code)}</span></span></div>`).join('');
+
+  if(n.kind==='url'){h+=h4('Route')+'<table class="w-full">'+
+    row('handler',esc((m.handler||'').replace('.as_view()','')))+
+    (m.name?row('name',esc(m.name)):'')+
+    (m.params&&m.params.length?row('params',esc(m.params.join(', '))):'')+
+    (m.include?row('type','include()'):'')+(m.router?row('type','DRF router'):'')+'</table>';}
+  if(n.kind==='view'){const r=[];
+    if(m.http&&m.http.length)r.push(row('methods',m.http.join(', ').toUpperCase()));
+    ['model','queryset','serializer_class','form_class','template_name','paginate_by',
+     'permission_classes','lookup_field'].forEach(k=>{if(m[k]!==undefined)r.push(row(k,esc(m[k])));});
+    if(r.length)h+=h4('Config')+'<table class="w-full">'+r.join('')+'</table>';
+    const urls=edges.filter(e=>e.target===sel&&e.kind==='routes').map(e=>byId[e.source].label);
+    if(urls.length)h+=h4('Reachable at')+tags(urls);}
+  if(n.kind==='model'){
+    if(m.fields&&m.fields.length)h+=h4(`Fields (${m.fields.length})`)+'<table class="w-full">'+
+      m.fields.map(f=>row(f.name,
+        `${esc(f.type)}${f.to?' → '+esc(f.to):''}${f.max_length?`(${f.max_length})`:''}`+
+        (f.opts&&f.opts.length?` <span class="text-slate-700">${esc(f.opts.join(','))}</span>`:'')+
+        (f.on_delete?` <span class="text-slate-700">${esc(f.on_delete)}</span>`:''))).join('')+'</table>';
+    if(m.meta_opts&&Object.keys(m.meta_opts).length)h+=h4('Meta')+'<table class="w-full">'+
+      Object.entries(m.meta_opts).map(([k,v])=>row(k,esc(v))).join('')+'</table>';
+    if(m.properties&&m.properties.length)h+=h4('Properties')+tags(m.properties);}
+  if(n.kind==='task'){const o=m.task_opts||{};
+    h+=h4('Task')+'<table class="w-full">'+row('signature',esc(n.label+'('+(m.args||[]).join(', ')+')'))+
+      Object.entries(o).map(([k,v])=>row(k,esc(v))).join('')+'</table>';
+    const cb=edges.filter(e=>e.target===sel&&(e.kind==='calls'||e.kind==='schedules'))
+      .map(e=>byId[e.source].label);
+    if(cb.length)h+=h4('Triggered by')+tags(cb);}
+  if(n.kind==='beat')h+=h4('Schedule')+'<table class="w-full">'+row('task',esc(m.task))+
+    row('every',esc(m.schedule))+(m.args?row('args',esc(m.args)):'')+'</table>';
+  if(n.kind==='signal')h+=h4('Receiver')+'<table class="w-full">'+
+    row('signal',esc(m.signal))+(m.sender?row('sender',esc(m.sender)):'')+'</table>';
+  if(n.kind==='serializer'){const r=[];
+    ['model','fields','read_only_fields'].forEach(k=>{if(m[k]!==undefined)r.push(row(k,esc(m[k])));});
+    if(r.length)h+=h4('Meta')+'<table class="w-full">'+r.join('')+'</table>';}
+  if(n.kind==='admin'){const r=[];
+    ['list_display','list_filter','search_fields','readonly_fields'].forEach(k=>{
+      if(m[k]!==undefined)r.push(row(k,esc(m[k])));});
+    if(r.length)h+=h4('Options')+'<table class="w-full">'+r.join('')+'</table>';}
+
+  if(m.complexity)h+=h4('Complexity')+`<div class="flex items-center gap-2">
+    <div class="flex-1 h-1.5 rounded bg-slate-800 overflow-hidden"><div class="h-full rounded"
+      style="width:${Math.min(100,m.complexity*5)}%;background:${
+      m.complexity>=18?'#ff7b72':m.complexity>=10?'#f0c674':'#7ee787'}"></div></div>
+    <span class="mono text-[11px] text-slate-400">CC ${m.complexity}</span></div>`;
+  if(m.methods&&m.methods.length)h+=h4(`Methods (${m.n_methods||m.methods.length})`)+
+    tags(m.methods.map(x=>x+'()'));
+  if(m.args&&m.args.length&&n.kind!=='task')h+=h4('Args')+tags(m.args);
+  if(m.bases&&m.bases.length)h+=h4('Inherits')+tags(m.bases);
+  if(m.decorators&&m.decorators.length)h+=h4('Decorators')+tags(m.decorators.map(x=>'@'+x));
+
+  const rel=edges.filter(e=>e.source===sel||e.target===sel);
+  if(rel.length)h+=h4(`Relations (${rel.length})`)+'<table class="w-full">'+rel.map(e=>{
+    const out=e.source===sel,o=byId[out?e.target:e.source];
+    return `<tr><td class="mono text-[11px] py-1 border-t border-slate-800"
+        style="color:${COLORS[e.kind]||'#64748b'}">${esc(EDGE_LABEL[e.kind]||e.kind)}${
+        e.label?' <span class="text-slate-600">'+esc(e.label)+'</span>':''}</td>
+      <td class="text-right py-1 border-t border-slate-800">
+        <a href="#" onclick="select('${esc(o.id)}');return false"
+          class="mono text-[11px] text-sky-400 hover:underline">${out?'→':'←'} ${esc(o.label)}</a>
+        <span class="mono text-[9.5px] text-slate-700 ml-1">${esc(o.app)}</span></td></tr>`;}).join('')+'</table>';
+  panel.innerHTML=h;panel.classList.remove('hidden');refresh();saveHash();
+  if(!mqDesktop.matches&&tab==='flow')fitFlow();}
+window.select=select;
+stageA.addEventListener('click',e=>{if(!e.target.closest('.board'))select(null);});
+
+/* ================= TAB 2: flow charts ================= */
+const stageF=document.getElementById('tab-flow'), fsvg=document.getElementById('flow'),
+      froot=document.getElementById('flowRoot'), finfo=document.getElementById('flowinfo');
+let fv={x:0,y:0,k:1}, fpan=null, flowMode='request';
+const applyF=()=>froot.setAttribute('transform',`translate(${fv.x},${fv.y}) scale(${fv.k})`);
+stageF.addEventListener('wheel',e=>{e.preventDefault();
+  const s=Math.exp(-e.deltaY*0.0013),k=Math.min(2.5,Math.max(.12,fv.k*s));
+  const r=stageF.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  fv.x=mx-(mx-fv.x)*(k/fv.k);fv.y=my-(my-fv.y)*(k/fv.k);fv.k=k;applyF();},{passive:false});
+stageF.addEventListener('pointerdown',e=>{if(e.target.closest('.fl-node'))return;
+  fpan={x:e.clientX,y:e.clientY,vx:fv.x,vy:fv.y};});
+
+const el=(t,a,p)=>{const n=document.createElementNS(NS,t);
+  for(const k in a)n.setAttribute(k,a[k]); if(p)p.appendChild(n); return n;};
+function fnode(g,{x,y,w,h,label,sub,color,id,kind,rx=9}){
+  const gg=el('g',{class:'fl-node',transform:`translate(${x},${y})`},g);
+  if(id)gg.dataset.id=id;
+  el('rect',{width:w,height:h,rx,fill:'#161d27',stroke:color,'stroke-width':1.4,
+    'fill-opacity':.95},gg);
+  el('rect',{width:4,height:h,rx:2,fill:color},gg);
+  const t=el('text',{x:14,y:sub?h/2-3:h/2+4,fill:'#dbe5ef','font-size':12.5,
+    'font-family':'ui-monospace,monospace'},gg); t.textContent=label;
+  if(sub){const s=el('text',{x:14,y:h/2+12,fill:'#64748b','font-size':10,
+    'font-family':'ui-monospace,monospace'},gg); s.textContent=sub;}
+  if(id)gg.addEventListener('click',ev=>{ev.stopPropagation();select(id);});
+  return gg;}
+function fedge(g,x1,y1,x2,y2,cls,label){
+  const dx=Math.max(30,Math.abs(x2-x1)*.5)*(x2>=x1?1:-1);
+  const p=el('path',{class:'fl-edge wire '+cls,
+    d:`M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`,'marker-end':'url(#ah)'},g);
+  if(label){const t=el('text',{x:(x1+x2)/2,y:(y1+y2)/2-5,fill:'#64748b','font-size':9.5,
+    'text-anchor':'middle','font-family':'ui-monospace,monospace'},g);t.textContent=label;}
+  return p;}
+function lane(g,x,y,w,h,title,color){
+  el('rect',{x,y,width:w,height:h,rx:14,fill:color+'0c',stroke:color+'33','stroke-width':1,
+    'stroke-dasharray':'5 5'},g);
+  const t=el('text',{x:x+14,y:y+20,fill:color,'font-size':10.5,'font-weight':700,
+    'letter-spacing':1.4,'font-family':'ui-monospace,monospace'},g);
+  t.textContent=title.toUpperCase();}
+
+function clearFlow(){froot.innerHTML='';
+  const d=el('defs',{},froot);
+  const m=el('marker',{id:'ah',viewBox:'0 0 8 8',refX:7,refY:4,markerWidth:5,markerHeight:5,
+    orient:'auto-start-reverse'},d);
+  el('path',{d:'M0,0 L8,4 L0,8 z',fill:'#64748b'},m);}
+
+const INFO={
+  request:'Lifecycle of an HTTP request: it passes through middleware, matches a URL, reaches a view, which talks to models/serializers and may queue a Celery task.',
+  apps:'App dependencies derived from real imports between packages. Each card shows the size of the app and the mix of node kinds it contains.',
+  celery:'The async pipeline: what triggers each task (views, signals, beat, management commands) and which tasks chain into others.',
+  data:'ER diagram: every model with its fields, and the ForeignKey / M2M / OneToOne relations between them, grouped by app.'};
+
+function visible(n){
+  const term=document.getElementById('q').value.trim().toLowerCase();
+  if(!onKind.has(n.kind)||!onApp.has(n.app))return false;
+  if(term)return (n.label+' '+n.file+' '+JSON.stringify(n.meta)).toLowerCase().includes(term);
+  return true;}
+
+function flowRequest(){
+  const g=froot, colW=210, H=44, VG=12;
+  const narrow=(stageF.getBoundingClientRect().width||900)<760;
+  const cols=[
+    {t:'Middleware',c:'#c9a2ff',items:(S.MIDDLEWARE||[]).map(m=>({label:m.split('.').pop(),sub:m.split('.').slice(0,-1).pop()}))
+      .concat(nodesOf('middleware').filter(visible).map(n=>({label:n.label,sub:n.app,id:n.id})))},
+    {t:'URLconf',c:'#ffa657',items:nodesOf('url').filter(visible).map(n=>
+      ({label:n.label.slice(0,26),sub:(n.meta.name||n.app),id:n.id}))},
+    {t:'Views',c:'#79c0ff',items:nodesOf('view').filter(visible).map(n=>
+      ({label:n.label,sub:(n.meta.http||[]).join('/').toUpperCase()||n.app,id:n.id}))},
+    {t:'Serializers / Forms',c:'#a5d6ff',items:[...nodesOf('serializer'),...nodesOf('form')]
+      .filter(visible).map(n=>({label:n.label,sub:n.app,id:n.id}))},
+    {t:'Models / DB',c:'#7ee787',items:nodesOf('model').filter(visible).map(n=>
+      ({label:n.label,sub:(n.meta.fields||[]).length+'f',id:n.id}))},
+  ];
+  const box={};
+  let laneH=0;
+  if(narrow){
+    // phones: stack each layer as its own horizontal band
+    let y=10;
+    cols.forEach(col=>{
+      const h=col.items.length*(H+VG)+50;
+      lane(g,24,y,colW+32,h,col.t,col.c);
+      col.items.forEach((it,i)=>{const yy=y+34+i*(H+VG);
+        fnode(g,{x:40,y:yy,w:colW,h:H,label:it.label,sub:it.sub,color:col.c,id:it.id});
+        if(it.id)box[it.id]={x:40,y:yy,w:colW,h:H};});
+      y+=h+26;});
+    fnode(g,{x:40,y:y,w:150,h:40,label:'HTTP Request',sub:'client',color:'#e2e8f0'});
+    const tasks=nodesOf('task').filter(visible);
+    if(tasks.length){
+      y+=64; const h=tasks.length*(H+VG)+50;
+      lane(g,24,y,colW+32,h,'Async · Celery','#d2a8ff');
+      tasks.forEach((n,i)=>{const yy=y+34+i*(H+VG);
+        fnode(g,{x:40,y:yy,w:colW,h:H,label:n.label,sub:'task',color:'#d2a8ff',id:n.id});
+        box[n.id]={x:40,y:yy,w:colW,h:H};});}
+    // vertical routing: exit right, drop, come back
+    let ch=0;
+    edges.forEach(e=>{const a=box[e.source],b=box[e.target];
+      if(!a||!b)return;
+      if(!['routes','uses','queries','calls'].includes(e.kind))return;
+      const gx=280+((ch++)%5)*14;
+      const p=el('path',{class:'fl-edge wire '+e.kind,
+        d:`M${a.x+a.w},${a.y+a.h/2} L${gx},${a.y+a.h/2} L${gx},${b.y+b.h/2} L${b.x+b.w},${b.y+b.h/2}`,
+        'marker-end':'url(#ah)'},g);});
+    return box;}
+
+  const X=[40,300,570,850,1130];
+  const maxN=Math.max(...cols.map(c=>c.items.length),1);
+  laneH=Math.max(maxN*(H+VG)+50,160);
+  cols.forEach((col,ci)=>{
+    lane(g,X[ci]-16,10,colW+32,laneH,col.t,col.c);
+    col.items.forEach((it,i)=>{
+      const y=44+i*(H+VG);
+      fnode(g,{x:X[ci],y,w:colW,h:H,label:it.label,sub:it.sub,color:col.c,id:it.id});
+      if(it.id)box[it.id]={x:X[ci],y,w:colW,h:H};});});
+  fnode(g,{x:X[0]-16,y:laneH+40,w:150,h:40,label:'HTTP Request',sub:'client',color:'#e2e8f0'});
+  edges.forEach(e=>{const a=box[e.source],b=box[e.target];
+    if(!a||!b)return;
+    if(!['routes','uses','queries'].includes(e.kind))return;
+    fedge(g,a.x+a.w,a.y+a.h/2,b.x,b.y+b.h/2,e.kind);});
+  const tasks=nodesOf('task').filter(visible);
+  if(tasks.length){
+    const ly=laneH+110;
+    lane(g,X[2]-16,ly-34,colW+32,tasks.length*(H+VG)+50,'Async · Celery','#d2a8ff');
+    tasks.forEach((n,i)=>{const y=ly+i*(H+VG);
+      fnode(g,{x:X[2],y,w:colW,h:H,label:n.label,sub:'task',color:'#d2a8ff',id:n.id});
+      box[n.id]={x:X[2],y,w:colW,h:H};});
+    edges.filter(e=>e.kind==='calls').forEach(e=>{const a=box[e.source],b=box[e.target];
+      if(a&&b)fedge(g,a.x+a.w,a.y+a.h/2,b.x+b.w+12,b.y+b.h/2,'calls');});}
+  return box;}
+
+function flowApps(){
+  const g=froot, R=Math.max(190,apps.length*38);
+  const cx=R+180, cy=R+120, box={};
+  const shown=apps.filter(a=>onApp.has(a));
+  shown.forEach((a,i)=>{
+    const ang=-Math.PI/2+i*2*Math.PI/shown.length;
+    const st=(D.app_stats||{})[a]||{};
+    const w=200,h=64,x=cx+Math.cos(ang)*R-w/2,y=cy+Math.sin(ang)*R-h/2;
+    const gg=fnode(g,{x,y,w,h,label:a,
+      sub:`${st.total||0} nodes · ${st.loc||0} loc`,color:appColor[a],rx:12});
+    const parts=ORDER.filter(k=>st[k]);
+    parts.forEach((k,j)=>el('rect',{x:x+14+j*13,y:y+h-13,width:9,height:5,rx:2,
+      fill:COLORS[k],opacity:.85},g));
+    box[a]={x,y,w,h,cx:x+w/2,cy:y+h/2};});
+  (D.app_deps||[]).forEach(d=>{const a=box[d.source],b=box[d.target];
+    if(!a||!b)return;
+    const ang=Math.atan2(b.cy-a.cy,b.cx-a.cx);
+    fedge(g,a.cx+Math.cos(ang)*100,a.cy+Math.sin(ang)*34,
+            b.cx-Math.cos(ang)*100,b.cy-Math.sin(ang)*34,'uses');});
+  // cross-app node edges counted
+  const pairs={};
+  edges.forEach(e=>{const s=byId[e.source].app,t=byId[e.target].app;
+    if(s!==t&&box[s]&&box[t])pairs[s+'>'+t]=(pairs[s+'>'+t]||0)+1;});
+  Object.entries(pairs).forEach(([k,c])=>{const [s,t]=k.split('>'),a=box[s],b=box[t];
+    const ang=Math.atan2(b.cy-a.cy,b.cx-a.cx);
+    const p=fedge(g,a.cx+Math.cos(ang)*100,a.cy+Math.sin(ang)*34,
+      b.cx-Math.cos(ang)*100,b.cy-Math.sin(ang)*34,'routes',c+' refs');});
+  return box;}
+
+function flowCelery(){
+  const g=froot, box={}, H=44, VG=13;
+  const narrowC=(stageF.getBoundingClientRect().width||900)<760;
+  const colW=narrowC?200:220;
+  const WX=narrowC?300:556, BX=narrowC?190:330, BW2=narrowC?110:150;
+  const trig=[...nodesOf('view'),...nodesOf('signal'),...nodesOf('command')]
+    .filter(visible).filter(n=>edges.some(e=>e.source===n.id&&e.kind==='calls'));
+  const beats=nodesOf('beat').filter(visible);
+  const tasks=nodesOf('task').filter(visible);
+  const left=[...beats,...trig];
+  const lh=Math.max(left.length*(H+VG)+50,140), th=Math.max(tasks.length*(H+VG)+50,140);
+  lane(g,24,10,colW+32,lh,'Producers','#79c0ff');
+  left.forEach((n,i)=>{const y=44+i*(H+VG);
+    fnode(g,{x:40,y,w:colW,h:H,label:n.label,sub:n.kind==='beat'?String(n.meta.schedule||''):n.kind,
+      color:COLORS[n.kind],id:n.id}); box[n.id]={x:40,y,w:colW,h:H};});
+  // broker
+  const by=Math.max(lh,th)/2;
+  fnode(g,{x:BX,y:by-26,w:BW2,h:56,label:'Broker',
+    sub:(S.CELERY_BROKER_URL||'redis').replace(/^\w+:\/\//,'').slice(0,20),color:'#ff9ecd',rx:14});
+  lane(g,WX-16,10,colW+32,th,'Workers · Tasks','#d2a8ff');
+  tasks.forEach((n,i)=>{const y=44+i*(H+VG),o=n.meta.task_opts||{};
+    fnode(g,{x:WX,y,w:colW,h:H,label:n.label,
+      sub:(o.queue?'q:'+o.queue+' · ':'')+((n.meta.args||[]).join(', ')||'no args'),
+      color:'#d2a8ff',id:n.id}); box[n.id]={x:WX,y,w:colW,h:H};});
+  left.forEach(n=>{const a=box[n.id];
+    if(a)fedge(g,a.x+a.w,a.y+a.h/2,BX,by,n.kind==='beat'?'schedules':'calls');});
+  tasks.forEach(n=>{const b=box[n.id]; if(b)fedge(g,BX+BW2,by,b.x,b.y+b.h/2,'calls');});
+  edges.filter(e=>e.kind==='calls').forEach(e=>{const a=box[e.source],b=box[e.target];
+    if(a&&b&&a.x===WX&&b.x===WX)fedge(g,a.x+a.w,a.y+a.h/2,b.x+b.w+14,b.y+b.h/2,'calls','chain');});
+  // result backend
+  if(S.CELERY_RESULT_BACKEND)fnode(g,{x:WX+colW+40,y:by-22,w:180,h:46,label:'Result backend',
+    sub:S.CELERY_RESULT_BACKEND.replace(/^\w+:\/\//,'').slice(0,22),color:'#56d4dd',rx:14});
+  return box;}
+
+function flowData(){
+  const g=froot, box={}, W=230, VG=14;
+  let x=40;
+  apps.filter(a=>onApp.has(a)).forEach(app=>{
+    const ms=D.nodes.filter(n=>n.app===app&&n.kind==='model'&&visible(n));
+    if(!ms.length)return;
+    let y=48; const h0=y;
+    ms.forEach(n=>{
+      const f=(n.meta.fields||[]);
+      const h=34+Math.min(f.length,9)*15;
+      const gg=el('g',{class:'fl-node',transform:`translate(${x},${y})`},g);
+      gg.dataset.id=n.id;
+      el('rect',{width:W,height:h,rx:9,fill:'#161d27',stroke:'#7ee787','stroke-width':1.3},gg);
+      el('rect',{width:W,height:26,rx:9,fill:'#7ee78714'},gg);
+      const t=el('text',{x:12,y:17,fill:'#7ee787','font-size':12.5,'font-weight':600,
+        'font-family':'ui-monospace,monospace'},gg); t.textContent=n.label;
+      const cnt=el('text',{x:W-12,y:17,fill:'#475569','font-size':10,'text-anchor':'end',
+        'font-family':'ui-monospace,monospace'},gg); cnt.textContent=f.length+'f';
+      f.slice(0,9).forEach((fl,i)=>{
+        const ft=el('text',{x:12,y:42+i*15,fill:'#94a3b8','font-size':10,
+          'font-family':'ui-monospace,monospace'},gg);
+        ft.textContent=fl.name;
+        const tt=el('text',{x:W-12,y:42+i*15,fill:fl.to?'#7ee787':'#475569','font-size':9.5,
+          'text-anchor':'end','font-family':'ui-monospace,monospace'},gg);
+        tt.textContent=(fl.to?'→'+fl.to:fl.type.replace('Field',''));});
+      if(f.length>9){const mt=el('text',{x:12,y:42+9*15,fill:'#475569','font-size':9.5,
+        'font-family':'ui-monospace,monospace'},gg); mt.textContent='+'+(f.length-9)+' more';}
+      gg.addEventListener('click',ev=>{ev.stopPropagation();select(n.id);});
+      box[n.id]={x,y,w:W,h}; y+=h+VG;});
+    lane(g,x-16,10,W+32,y-h0+52,app,appColor[app]);
+    x+=W+70;});
+  edges.filter(e=>['fk','m2m','o2o'].includes(e.kind)).forEach(e=>{
+    const a=box[e.source],b=box[e.target]; if(!a||!b)return;
+    const right=b.x>=a.x;
+    fedge(g,right?a.x+a.w:a.x,a.y+a.h/2,right?b.x:b.x+b.w,b.y+b.h/2,e.kind,e.label);});
+  return box;}
+
+let flowBox={};
+function paintFlow(){
+  clearFlow();
+  flowBox = flowMode==='request'?flowRequest():flowMode==='apps'?flowApps():
+            flowMode==='celery'?flowCelery():flowData();
+  finfo.textContent=INFO[flowMode];
+  if(sel){const hot=nbr(sel);
+    froot.querySelectorAll('.fl-node').forEach(n=>{
+      if(n.dataset.id)n.classList.toggle('dim',!hot.has(n.dataset.id));});}
+}
+function panelOverlap(){
+  // on small screens the detail panel is a bottom sheet that covers the canvas
+  const p=document.getElementById('panel');
+  if(p.classList.contains('hidden')||mqDesktop.matches)return 0;
+  return p.getBoundingClientRect().height;}
+function fitFlow(){
+  const bb=froot.getBBox(), r=stageF.getBoundingClientRect();
+  if(!bb.width)return;
+  const narrow=r.width<760;
+  const topPad = narrow?70:60;               // room for the wrapped toolbar
+  const avH = r.height-topPad-20-panelOverlap();
+  const kw=(r.width-32)/bb.width;
+  if(narrow){
+    // phones: fit the width, let the user scroll/drag down the stack
+    fv.k=Math.min(kw,1);
+    fv.x=(r.width-bb.width*fv.k)/2-bb.x*fv.k;
+    fv.y=topPad-bb.y*fv.k;
+  }else{
+    fv.k=Math.min(kw,avH/bb.height,1.25);
+    fv.x=(r.width-bb.width*fv.k)/2-bb.x*fv.k;
+    fv.y=topPad+(avH-bb.height*fv.k)/2-bb.y*fv.k;}
+  applyF();}
+document.querySelectorAll('.flowbtn').forEach(b=>b.onclick=()=>{
+  flowMode=b.dataset.flow; syncFlowBtns(); paintFlow(); fitFlow();});
+function syncFlowBtns(){document.querySelectorAll('.flowbtn').forEach(b=>{
+  const on=b.dataset.flow===flowMode;
+  b.className='flowbtn px-3 py-1.5 rounded-md text-xs transition '+
+    (on?'bg-slate-700 text-slate-100':'text-slate-500 hover:text-slate-200');});}
+stageF.addEventListener('click',e=>{if(!e.target.closest('.fl-node'))select(null);});
+
+/* ================= health tab ================= */
+function paintHealth(){
+  const box=document.getElementById('healthBody');
+  if(!H){box.innerHTML='<div class="text-slate-500 text-sm">Health analysis is disabled (--no-health).</div>';return;}
+  const c=H.counts, sc=H.score;
+  const ring=sc>=80?'#7ee787':sc>=55?'#f0c674':'#ff7b72';
+  let h=`<div class="flex flex-wrap items-center gap-4 sm:gap-6 mb-6">
+    <div class="relative w-24 h-24 shrink-0">
+      <svg viewBox="0 0 36 36" class="w-24 h-24 -rotate-90">
+        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#1e2732" stroke-width="3"/>
+        <circle cx="18" cy="18" r="15.9" fill="none" stroke="${ring}" stroke-width="3"
+          stroke-dasharray="${sc} 100" stroke-linecap="round"/></svg>
+      <div class="absolute inset-0 flex flex-col items-center justify-center">
+        <span class="mono text-xl font-bold" style="color:${ring}">${sc}</span>
+        <span class="text-[9px] text-slate-600 uppercase tracking-wider">score</span></div></div>
+    <div class="flex gap-2 flex-wrap flex-1">${
+      ['error','warn','info'].map(k=>`<div class="px-4 py-3 rounded-xl border ${SEVBG[k]}">
+        <div class="mono text-2xl font-bold">${c[k]}</div>
+        <div class="text-[10px] uppercase tracking-wider opacity-70">${k}</div></div>`).join('')}
+      <div class="px-4 py-3 rounded-xl border border-slate-700 bg-slate-800/40">
+        <div class="mono text-2xl font-bold text-slate-200">${H.issues.length}</div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-500">total</div></div></div></div>`;
+
+  if(H.cycles&&H.cycles.length)h+=`<div class="mb-5 p-3 rounded-xl border border-rose-500/30 bg-rose-500/10">
+    <div class="text-[10px] uppercase tracking-wider text-rose-300 font-bold mb-1.5">Circular app dependencies</div>
+    ${H.cycles.map(cy=>`<div class="mono text-[12px] text-rose-200">${esc(cy.concat([cy[0]]).join('  →  '))}</div>`).join('')}</div>`;
+
+  // group by check code
+  const byCode={}; H.issues.forEach(i=>{(byCode[i.code]=byCode[i.code]||[]).push(i);});
+  const rank={error:0,warn:1,info:2};
+  const codes=Object.keys(byCode).sort((a,b)=>
+    rank[byCode[a][0].severity]-rank[byCode[b][0].severity]||byCode[b].length-byCode[a].length);
+  h+=`<div class="space-y-2.5">`;
+  codes.forEach(code=>{
+    const list=byCode[code], sev=list[0].severity;
+    h+=`<details class="rounded-xl border border-slate-800 bg-[#121821] overflow-hidden" ${
+        sev==='error'?'open':''}>
+      <summary class="flex items-start gap-2.5 px-3 sm:px-4 py-3 cursor-pointer hover:bg-[#161d27]">
+        <span class="w-2 h-2 rounded-full shrink-0 mt-1.5" style="background:${SEV[sev]}"></span>
+        <span class="flex-1 min-w-0">
+          <span class="text-[13px] text-slate-200">${esc(list[0].message)}</span>
+          <span class="mono text-[10px] text-slate-600 block sm:inline sm:ml-1.5">${esc(code)}</span>
+        </span>
+        <span class="mono text-[11px] px-2 py-0.5 rounded ${SEVBG[sev]} border shrink-0">${list.length}</span>
+      </summary>
+      <div class="border-t border-slate-800 divide-y divide-slate-800/60">${
+        list.map(i=>{const n=byId[i.node];
+          if(!n)return `<div class="px-4 py-2 text-[12px] text-slate-400">${esc(i.detail||'')}</div>`;
+          return `<div class="px-3 sm:px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-0.5
+              hover:bg-[#161d27] cursor-pointer" onclick="gotoNode('${esc(n.id)}')">
+            <span class="w-1.5 h-1.5 rounded-sm shrink-0" style="background:${COLORS[n.kind]}"></span>
+            <span class="mono text-[12px] text-slate-200">${esc(n.label)}</span>
+            ${i.detail?`<span class="mono text-[10.5px] text-slate-500">${esc(i.detail)}</span>`:''}
+            <span class="sm:ml-auto mono text-[10px] text-slate-600 basis-full sm:basis-auto
+              truncate">${esc(n.app)} · ${esc(n.file)}:${n.line}</span>
+          </div>`;}).join('')}</div></details>`;});
+  h+=`</div>`;
+
+  // per-app table
+  const pa=H.per_app||{};
+  h+=`<h3 class="text-[10px] uppercase tracking-widest text-slate-600 font-bold mt-7 mb-2">Per app</h3>
+    <div class="rounded-xl border border-slate-800 overflow-hidden">${
+    Object.entries(pa).sort((a,b)=>b[1].total-a[1].total).map(([app,d])=>`
+      <div class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b border-slate-800/60 last:border-0">
+        <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${appColor[app]||'#64748b'}"></span>
+        <span class="mono text-[12.5px] text-slate-200 w-20 sm:w-32 truncate">${esc(app)}</span>
+        <div class="flex-1 flex h-2 rounded overflow-hidden bg-slate-800">
+          ${['error','warn','info'].map(k=>d[k]?`<div style="width:${d[k]/d.total*100}%;background:${SEV[k]}"></div>`:'').join('')}
+        </div>
+        <span class="mono text-[10.5px] sm:text-[11px] text-slate-500 w-20 sm:w-24 text-right shrink-0">${d.error}e ${d.warn}w ${d.info}i</span>
+      </div>`).join('')}</div>`;
+  box.innerHTML=h;
+}
+function gotoNode(id){tab='apps';syncTabs();closeNav();select(id);
+  const c=cardEl[id]; if(c){const b=boards[byId[id].app];
+    view.k=1; const r=stageA.getBoundingClientRect();
+    const bx=rectOf(id);
+    if(bx){view.x=r.width/2-(bx.x+bx.w/2);view.y=r.height/2-(bx.y+bx.h/2);applyA();}}
+  drawWires();}
+window.gotoNode=gotoNode;
+
+/* ================= permalink ================= */
+function saveHash(){
+  const p=new URLSearchParams();
+  p.set('t',tab); if(tab==='flow')p.set('f',flowMode);
+  if(sel)p.set('n',sel);
+  const q=document.getElementById('q').value.trim(); if(q)p.set('q',q);
+  if(onKind.size!==kinds.length)p.set('k',[...onKind].join(','));
+  if(onApp.size!==apps.length)p.set('a',[...onApp].join(','));
+  history.replaceState(null,'','#'+p.toString());}
+function loadHash(){
+  if(!location.hash)return;
+  const p=new URLSearchParams(location.hash.slice(1));
+  if(p.get('k')){onKind.clear();p.get('k').split(',').forEach(x=>onKind.add(x));
+    kinds.forEach(k=>(chipEls[k]||[]).forEach(b=>b.classList.toggle('opacity-30',!onKind.has(k))));}
+  if(p.get('a')){onApp.clear();p.get('a').split(',').forEach(x=>onApp.add(x));
+    [...appsBox.children].forEach((r,i)=>r.classList.toggle('opacity-30',!onApp.has(apps[i])));}
+  if(p.get('q'))document.getElementById('q').value=p.get('q');
+  if(p.get('f'))flowMode=p.get('f');
+  if(p.get('t'))tab=p.get('t');
+  if(p.get('n')&&byId[p.get('n')])sel=p.get('n');}
+
+/* ================= tabs ================= */
+let tab='apps';
+function syncTabs(){
+  document.querySelectorAll('.tabbtn').forEach(b=>{
+    const on=b.dataset.tab===tab;
+    b.className='tabbtn px-3 py-1 rounded-md text-xs font-medium transition '+
+      (on?'bg-slate-700 text-slate-100 shadow':'text-slate-500 hover:text-slate-200');});
+  document.getElementById('tab-apps').hidden=tab!=='apps';
+  document.getElementById('tab-flow').hidden=tab!=='flow';
+  document.getElementById('tab-health').hidden=tab!=='health';
+  document.getElementById('foldAll').hidden=tab!=='flow'?false:true;}
+document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{
+  tab=b.dataset.tab; syncTabs();
+  if(tab==='flow'){paintFlow();fitFlow();}
+  else if(tab==='health'){paintHealth();}
+  else{drawWires();}
+  saveHash();});
+document.getElementById('fit').onclick=()=>tab==='apps'?fitApps():fitFlow();
+let folded=false;
+document.getElementById('foldAll').onclick=e=>{folded=!folded;
+  apps.forEach(a=>{boards[a].classList.toggle('folded',folded);
+    boards[a].querySelector('.bbody').hidden=folded;
+    boards[a].querySelector('.fold').textContent=folded?'▸':'▾';});
+  e.target.textContent=folded?'Expand':'Collapse';autoLayout();place();drawWires();fitApps();};
+addEventListener('keydown',e=>{
+  if(e.key==='Escape')select(null);
+  if(e.target.tagName==='INPUT')return;
+  if(e.key==='f'||e.key==='F')tab==='apps'?fitApps():fitFlow();
+  if(e.key==='1'){tab='apps';syncTabs();drawWires();}
+  if(e.key==='2'){tab='flow';syncTabs();paintFlow();fitFlow();}
+  if(e.key==='3'){tab='health';syncTabs();paintHealth();}});
+let rzT=null;
+addEventListener('resize',()=>{clearTimeout(rzT);rzT=setTimeout(relayoutAll,160);});
+addEventListener('orientationchange',()=>setTimeout(relayoutAll,300));
+
+/* ================= touch: pinch zoom ================= */
+function addPinch(stage,getV,setV){
+  let pts=new Map(), base=null;
+  stage.addEventListener('touchstart',e=>{
+    if(e.touches.length!==2)return;
+    const [a,b]=[e.touches[0],e.touches[1]];
+    const r=stage.getBoundingClientRect();
+    const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    const cx=(a.clientX+b.clientX)/2-r.left, cy=(a.clientY+b.clientY)/2-r.top;
+    const v=getV(); base={d,cx,cy,k:v.k,x:v.x,y:v.y};},{passive:true});
+  stage.addEventListener('touchmove',e=>{
+    if(e.touches.length!==2||!base)return;
+    e.preventDefault();
+    const [a,b]=[e.touches[0],e.touches[1]];
+    const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    const k=Math.min(2.5,Math.max(.12,base.k*(d/base.d)));
+    setV({k, x:base.cx-(base.cx-base.x)*(k/base.k), y:base.cy-(base.cy-base.y)*(k/base.k)});
+  },{passive:false});
+  stage.addEventListener('touchend',e=>{if(e.touches.length<2)base=null;},{passive:true});
+}
+addPinch(stageA,()=>view,v=>{view.k=v.k;view.x=v.x;view.y=v.y;applyA();});
+addPinch(stageF,()=>fv,v=>{fv.k=v.k;fv.x=v.x;fv.y=v.y;applyF();});
+
+if(H){const b=document.getElementById('tabBadge');
+  b.textContent=H.counts.error||''; if(!H.counts.error)b.remove();}
+loadHash();
+syncTabs(); syncFlowBtns(); drawWires(); fitApps(); refresh();
+if(tab==='flow'){paintFlow();fitFlow();} if(tab==='health')paintHealth();
+if(sel){const _s=sel;sel=null;select(_s);}
+</script>
+</body></html>

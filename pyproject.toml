@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "djangomap"
+version = "0.1.0"
+description = "Turn any Django project into an interactive HTML architecture diagram: models, views, URLs, Celery tasks, signals — plus a health report."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "djangomap contributors" }]
+keywords = [
+    "django", "diagram", "visualization", "architecture", "erd",
+    "celery", "static-analysis", "ast", "documentation", "graph",
+    "code-quality", "flowchart",
+]
+dependencies = []
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/acme/djangomap"
+Repository = "https://github.com/acme/djangomap"
+Issues = "https://github.com/acme/djangomap/issues"
+Changelog = "https://github.com/acme/djangomap/blob/main/CHANGELOG.md"
+
+[project.scripts]
+djangomap = "djangomap.cli:main"
+
+[tool.setuptools]
+packages = ["djangomap"]
+
+[tool.setuptools.package-data]
+djangomap = ["template.html", "tailwind.css"]
