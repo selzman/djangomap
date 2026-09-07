@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "djangomap contributors" }]
+authors = [{ name = "Armin", email = "arminyarali1@gmail.com" }]
 keywords = [
     "django", "diagram", "visualization", "architecture", "erd",
     "celery", "static-analysis", "ast", "documentation", "graph",
@@ -39,10 +39,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/acme/djangomap"
-Repository = "https://github.com/acme/djangomap"
-Issues = "https://github.com/acme/djangomap/issues"
-Changelog = "https://github.com/acme/djangomap/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/selzman/djangomap"
+Repository = "https://github.com/selzman/djangomap"
+Issues = "https://github.com/selzman/djangomap/issues"
+Changelog = "https://github.com/selzman/djangomap/blob/main/CHANGELOG.md"
 
 [project.scripts]
 djangomap = "djangomap.cli:main"

@@ -14,8 +14,11 @@ from typing import Any
 SKIP_DIRS = {
     ".git", ".hg", ".svn", "__pycache__", "node_modules", ".venv", "venv",
     "env", ".env", ".tox", ".mypy_cache", ".pytest_cache", "migrations",
-    "static", "media", "dist", "build", ".idea", ".vscode",
+    "static", "media", "dist", "build", ".idea", ".vscode", "logs",
 }
+# skipped unless include_tests=True
+TEST_DIRS = {"tests", "test", "testing", "simulation", "fixtures"}
+TEST_FILE_PREFIXES = ("test_", "conftest", "factories")
 
 MODEL_BASES = {"Model", "models.Model", "AbstractUser", "AbstractBaseUser",
                "TimeStampedModel", "PolymorphicModel"}
@@ -28,7 +31,7 @@ REL_KIND = {"ForeignKey": "fk", "ManyToManyField": "m2m", "OneToOneField": "o2o"
 
 # kinds that participate in the high level flow chart
 FLOW_LAYERS = ["url", "middleware", "view", "serializer", "form",
-               "model", "signal", "task", "beat"]
+               "model", "signal", "task", "beat", "consumer"]
 
 
 # --------------------------------------------------------------------------- #
@@ -63,6 +66,7 @@ class Project:
     edges: list = field(default_factory=list)
     settings: dict = field(default_factory=dict)
     app_deps: list = field(default_factory=list)
+    declared_apps: list = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,9 +77,32 @@ class Project:
             "edges": [asdict(e) for e in self.edges],
             "settings": self.settings,
             "app_deps": self.app_deps,
+            "declared_apps": self.declared_apps,
+            "app_order": self.app_order(),
             "app_stats": self.app_stats(),
             "stats": self.stats(),
         }
+
+    def app_order(self) -> list[str]:
+        """Board order: as declared in INSTALLED_APPS, then anything extra."""
+        by_dotted = {a.replace("/", ".").replace(os.sep, "."): a for a in self.apps}
+        out, seen = [], set()
+        for d in self.declared_apps:
+            parts = d.split(".")
+            if parts and parts[-1][:1].isupper():
+                parts = parts[:-1]
+                if parts and parts[-1] == "apps":
+                    parts = parts[:-1]
+            key = ".".join(parts)
+            while parts:
+                if key in by_dotted and key not in seen:
+                    seen.add(key); out.append(key); break
+                parts = parts[:-1]
+                key = ".".join(parts)
+        for a in self.apps:
+            if a not in seen:
+                out.append(a)
+        return out
 
     def stats(self) -> dict[str, int]:
         out: dict[str, int] = {}
@@ -204,6 +231,30 @@ class FileScanner:
         self.rel = rel
         self.fname = os.path.basename(path)
         self.imports: dict[str, str] = {}     # local name -> module
+        # role: what kind of module is this, whether it is models.py or models/x.py
+        parent = os.path.basename(os.path.dirname(path))
+        stem = self.fname[:-3] if self.fname.endswith(".py") else self.fname
+        if stem == "__init__":
+            stem = ""
+        self.role = self._role(stem, parent)
+
+    ROLE_DIRS = {
+        "models": "models", "views": "views", "apis": "views", "api": "views",
+        "serializers": "serializers", "urls": "urls", "admin": "admin",
+        "forms": "forms", "tasks": "tasks", "signals": "signals",
+        "middleware": "middleware", "consumers": "consumers",
+        "filters": "filters", "permissions": "permissions",
+    }
+
+    @classmethod
+    def _role(cls, stem: str, parent: str) -> str:
+        """messenger/models/messenger.py -> 'models'; crm/models.py -> 'models'."""
+        for key, role in cls.ROLE_DIRS.items():
+            if stem == key or stem.startswith(key):
+                return role
+        if parent in cls.ROLE_DIRS:
+            return cls.ROLE_DIRS[parent]
+        return ""
 
     def run(self) -> None:
         try:
@@ -232,9 +283,9 @@ class FileScanner:
             elif isinstance(node, (ast.Assign, ast.AnnAssign)):
                 self._assign(node)
 
-        if self.fname == "urls.py":
+        if self.role == "urls":
             self._urls(tree)
-        if self.fname == "admin.py":
+        if self.role == "admin":
             self._admin_register(tree)
         if "management" in self.rel.split(os.sep) and self.fname not in ("__init__.py",):
             self._command(tree)
@@ -259,17 +310,19 @@ class FileScanner:
         blob = " ".join(bases)
 
         kind = None
-        if self.fname.startswith("models") or any(b.split(".")[-1] in MODEL_BASES for b in bases):
+        if self.role == "models" or any(b.split(".")[-1] in MODEL_BASES for b in bases):
             kind = "model"
-        elif "Serializer" in blob or self.fname.startswith("serializers"):
+        elif "Serializer" in blob or self.role == "serializers":
             kind = "serializer"
-        elif "Middleware" in cls.name or self.fname.startswith("middleware"):
+        elif "Consumer" in blob or self.role == "consumers":
+            kind = "consumer"
+        elif "Middleware" in cls.name or self.role == "middleware":
             kind = "middleware"
-        elif any(h in blob for h in VIEW_HINTS) or self.fname.startswith("views"):
+        elif any(h in blob for h in VIEW_HINTS) or self.role == "views":
             kind = "view"
-        elif "Form" in blob or self.fname.startswith("forms"):
+        elif "Form" in blob or self.role == "forms":
             kind = "form"
-        elif "ModelAdmin" in blob or self.fname.startswith("admin"):
+        elif "ModelAdmin" in blob or self.role == "admin":
             kind = "admin"
         if kind is None:
             return
@@ -419,7 +472,7 @@ class FileScanner:
                             Edge(nid, "?" + str(base["sender"]).split(".")[-1], "listens", sig))
             base["signal"] = sig
             self._add(nid, fn.name, "signal", fn, base)
-        elif self.fname.startswith("views") or any(
+        elif self.role == "views" or any(
                 "require_" in d or "login_required" in d or "api_view" in d for d in decs):
             base["fbv"] = True
             base["optimised_qs"] = _uses(fn, "select_related", "prefetch_related", "only(", "defer(")
@@ -427,7 +480,7 @@ class FileScanner:
                 if isinstance(d, ast.Call) and "api_view" in _src(d.func) and d.args:
                     base["http"] = [m.lower() for m in _list_of_str(d.args[0])]
             self._add(nid, fn.name, "view", fn, base)
-        elif self.fname.startswith("tasks"):
+        elif self.role == "tasks":
             self._add(nid, fn.name, "task", fn, base)
         else:
             return
@@ -529,7 +582,8 @@ class FileScanner:
             })
             if include:
                 continue
-            b = handler.split("(")[0].replace(".as_view", "").split(".")[-1]
+            b = (handler.split("(")[0].replace(".as_view", "")
+                 .replace(".as_asgi", "").split(".")[-1])
             if b:
                 self.p.edges.append(Edge(nid, f"?{b}", "routes", kw.get("name", "")))
 
@@ -561,24 +615,195 @@ class FileScanner:
 # --------------------------------------------------------------------------- #
 # project walk
 # --------------------------------------------------------------------------- #
-def _app_of(root: str, path: str) -> str:
+APP_MARKERS = ("apps.py", "models.py", "admin.py", "views.py", "urls.py",
+               "serializers.py", "tasks.py")
+
+
+def _is_django_app(dirpath: str) -> bool:
+    """A directory is an app if it has migrations/, an AppConfig, or app modules."""
+    try:
+        entries = set(os.listdir(dirpath))
+    except OSError:
+        return False
+    if "migrations" in entries and os.path.isdir(os.path.join(dirpath, "migrations")):
+        return True
+    if "apps.py" in entries:
+        try:
+            with open(os.path.join(dirpath, "apps.py"), encoding="utf-8",
+                      errors="replace") as fh:
+                if "AppConfig" in fh.read():
+                    return True
+        except OSError:
+            pass
+    # package-style app: models/ + (views/ or apis/ or urls/)
+    pkgs = {e for e in entries if os.path.isdir(os.path.join(dirpath, e))}
+    if "models" in pkgs and (pkgs & {"views", "apis", "urls", "serializers"}):
+        return True
+    hits = sum(1 for m in APP_MARKERS if m in entries)
+    return hits >= 3
+
+
+SETTINGS_HINTS = ("INSTALLED_APPS", "ROOT_URLCONF", "DATABASES", "MIDDLEWARE")
+
+
+def find_settings_files(root: str) -> list[str]:
+    """Locate candidate settings modules anywhere in the tree.
+
+    Django projects put settings in wildly different places: settings.py,
+    settings/base.py, config/settings/production.py, web_config/environments/
+    common.py ... so we look for files that actually *define* settings.
+    """
+    cands: list[tuple[int, str]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in SKIP_DIRS and not d.startswith(".")]
+        for fn in filenames:
+            if not fn.endswith(".py"):
+                continue
+            full = os.path.join(dirpath, fn)
+            low = full.lower()
+            score = 0
+            if os.sep + "settings" in low or fn == "settings.py":
+                score += 3
+            if "environment" in low or "config" in low or "conf" in low:
+                score += 2
+            if fn in ("common.py", "base.py", "production.py", "prod.py",
+                      "development.py", "dev.py", "local.py", "default.py"):
+                score += 1
+            try:
+                with open(full, encoding="utf-8", errors="replace") as fh:
+                    head = fh.read(20000)
+            except OSError:
+                continue
+            hits = sum(1 for h in SETTINGS_HINTS if h in head)
+            if hits == 0:
+                continue
+            score += hits * 2
+            cands.append((score, full))
+    cands.sort(key=lambda t: (-t[0], t[1]))
+    return [f for _, f in cands]
+
+
+def installed_apps_of(root: str) -> list[str]:
+    """Read INSTALLED_APPS (following `from .x import *` style splits)."""
+    apps: list[str] = []
+    for f in find_settings_files(root)[:6]:
+        try:
+            tree = ast.parse(open(f, encoding="utf-8", errors="replace").read())
+        except (SyntaxError, OSError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == "INSTALLED_APPS":
+                    vals = _list_of_str(node.value)
+                    if vals:
+                        for v in vals:
+                            if v not in apps:
+                                apps.append(v)
+        if apps:
+            break
+    return apps
+
+
+def _app_dir(root: str, dotted: str) -> str | None:
+    """Resolve an INSTALLED_APPS entry to a directory relative to root.
+
+    Handles 'apps.crm', 'apps.crm.apps.CrmConfig' and plain 'core'.
+    """
+    parts = dotted.split(".")
+    # strip a trailing AppConfig reference: pkg.apps.FooConfig
+    if len(parts) >= 2 and parts[-1][:1].isupper():
+        parts = parts[:-1]
+        if parts and parts[-1] == "apps":
+            parts = parts[:-1]
+    while parts:
+        cand = os.path.join(root, *parts)
+        if os.path.isdir(cand):
+            return os.path.relpath(cand, root)
+        parts = parts[:-1]
+    return None
+
+
+def discover_apps(root: str, declared: list[str] | None = None) -> list[str]:
+    """Find every Django app under root, returned as paths relative to root.
+
+    INSTALLED_APPS is authoritative when we can read it: it tells us exactly
+    which packages Django loads, regardless of how each app is laid out
+    internally. Anything on disk that looks like an app but is not declared is
+    still picked up, so partially-configured projects keep working.
+    """
+    found: list[str] = []
+    if declared is None:
+        declared = installed_apps_of(root)
+    for dotted in declared:
+        if dotted.startswith("django.") or dotted.startswith("rest_framework"):
+            continue
+        d = _app_dir(root, dotted)
+        if d and d != "." and d not in found:
+            found.append(d)
+    for dirpath, dirnames, _ in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in SKIP_DIRS and not d.startswith(".")
+                       and d.lower() not in TEST_DIRS]
+        if dirpath == root:
+            continue
+        rel = os.path.relpath(dirpath, root)
+        # never treat a dir inside an already-found app as another app
+        if any(rel == f or rel.startswith(f + os.sep) for f in found):
+            dirnames[:] = [d for d in dirnames if d not in ("migrations",)]
+            continue
+        if _is_django_app(dirpath):
+            found.append(rel)
+    return sorted(set(found))
+
+
+def _app_of(root: str, path: str, apps: list[str]) -> str:
+    """Map a file to the longest matching app path, else a top-level bucket."""
     rel = os.path.relpath(path, root)
+    best = ""
+    for a in apps:
+        if rel == a or rel.startswith(a + os.sep):
+            if len(a) > len(best):
+                best = a
+    if best:
+        return best.replace(os.sep, ".")
     parts = rel.split(os.sep)
     return parts[0] if len(parts) > 1 else "(root)"
 
 
-def scan_project(root: str, name: str | None = None) -> Project:
+def scan_project(root: str, name: str | None = None,
+                 include_tests: bool = False,
+                 apps_only: bool = False) -> Project:
     root = os.path.abspath(root)
     proj = Project(name=name or os.path.basename(root), root=root)
     apps: set[str] = set()
 
+    declared = installed_apps_of(root)
+    app_paths = discover_apps(root, declared)
+    app_set = set(app_paths)
+    # remember declaration order/labels for the renderer
+    proj.settings.setdefault("INSTALLED_APPS", declared)
+    proj.declared_apps = [d for d in declared
+                          if not d.startswith(("django.", "rest_framework"))]
+
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+        if not include_tests:
+            dirnames[:] = [d for d in dirnames if d.lower() not in TEST_DIRS]
+        rel_dir = os.path.relpath(dirpath, root)
+        if apps_only and rel_dir != ".":
+            in_app = any(rel_dir == a or rel_dir.startswith(a + os.sep) for a in app_set)
+            if not in_app:
+                continue
         for fn in sorted(filenames):
             if not fn.endswith(".py"):
                 continue
+            if not include_tests and fn.startswith(TEST_FILE_PREFIXES):
+                continue
             full = os.path.join(dirpath, fn)
-            app = _app_of(root, full)
+            app = _app_of(root, full, app_paths)
             apps.add(app)
             FileScanner(proj, full, app, os.path.relpath(full, root)).run()
 

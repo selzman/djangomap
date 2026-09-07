@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Added
+- `INSTALLED_APPS` is now the authoritative source for which apps exist and in
+  what order boards are laid out. Settings modules are located by content, so
+  split/non-standard settings packages are supported. AppConfig entries
+  (`billing.apps.BillingConfig`) resolve to their package.
+- Apps present on disk but absent from `INSTALLED_APPS` are flagged in the sidebar.
+- Structural app discovery: apps are found by `migrations/`, an `AppConfig` in
+  `apps.py`, or module layout, at any nesting depth (`apps/crm`, `auths/users`, `core`).
+- Support for Django modules written as **packages** (`models/`, `views/`, `apis/`,
+  `serializers/`, `urls/`, `consumers/`, `middleware/`).
+- New `consumer` node kind for Channels WebSocket consumers, including
+  `websocket_urlpatterns` and `.as_asgi()` routing.
+- `--apps-only`, `--include-tests` and `--group-by {prefix,none}` CLI flags.
+- App boards and sidebar entries are grouped by namespace prefix.
+- Apps tab lays out each namespace as a separate labelled band; masonry packing
+  is scoped to the band so groups never interleave.
+
+### Changed
+- Test trees (`tests/`, `simulation/`, `test_*.py`, `conftest.py`, `factories.py`)
+  are now excluded from the scan by default.
+- Flow tab lanes wrap into sub-columns on large projects to stay readable.
+
+### Fixed
+- Apps nested under a shared parent package collapsed into a single board.
+- Boards from different namespaces were interleaved in one continuous grid.
+- World bounds became `NaN` when boards were hidden by a filter.
+- Models, views and serializers defined in package directories were invisible.
+
 ## [0.1.0] — 2026-09-06
 
 First public release.

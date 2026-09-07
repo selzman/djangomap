@@ -19,6 +19,12 @@ def main(argv=None) -> int:
     ap.add_argument("-o", "--out", default="djangomap.html", help="output HTML file")
     ap.add_argument("--json", dest="json_out", help="also dump raw graph JSON here")
     ap.add_argument("--title", help="diagram title")
+    ap.add_argument("--include-tests", action="store_true",
+                    help="also scan tests/, simulation/ and test_*.py files")
+    ap.add_argument("--apps-only", action="store_true",
+                    help="only scan detected Django apps (skip root scripts, config)")
+    ap.add_argument("--group-by", choices=["none", "prefix"], default="prefix",
+                    help="group app boards by their path prefix (default: prefix)")
 
     g = ap.add_argument_group("source links")
     g.add_argument("--editor", default="vscode",
@@ -36,13 +42,15 @@ def main(argv=None) -> int:
     g2.add_argument("--no-health", action="store_true", help="skip the health analysis")
     a = ap.parse_args(argv)
 
-    proj = scan_project(a.path, name=a.title)
+    proj = scan_project(a.path, name=a.title,
+                        include_tests=a.include_tests, apps_only=a.apps_only)
     data = proj.to_dict()
     health = None if a.no_health else analyse(proj)
     if health:
         data["health"] = health
     data["links"] = {"editor": a.editor, "repo_url": (a.repo_url or "").rstrip("/"),
                      "branch": a.branch}
+    data["group_by"] = a.group_by
 
     if a.format:
         print(EXPORTERS[a.format](data))
@@ -59,6 +67,7 @@ def main(argv=None) -> int:
     out = render_html(data, a.out, a.title)
     s = proj.stats()
     print(f"✓ {out}")
+    print(f"  apps detected: {len(proj.apps)}")
     print("  " + "  ".join(f"{k}={v}" for k, v in sorted(s.items())))
     if health:
         c = health["counts"]

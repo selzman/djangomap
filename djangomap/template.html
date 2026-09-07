@@ -4,10 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__ · djangomap</title>
-<style>__TAILWIND__</style>
+<style>__TAILWIND__
+.band-label{position:absolute;display:flex;align-items:center;gap:10px;
+  height:26px;pointer-events:none;z-index:1}
+.band-name{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:#8b98a9;font-weight:600;white-space:nowrap}
+.band-rule{flex:1;height:1px;background:linear-gradient(90deg,#2b3648,transparent)}
+
+.undecl{flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:13px;height:13px;border-radius:4px;background:#3a2a12;color:#f0b849;
+  font-size:9px;font-weight:700;line-height:1}
+</style>
 <style>
 :root{--model:#7ee787;--view:#79c0ff;--url:#ffa657;--task:#d2a8ff;--signal:#ff7b72;
- --form:#f0c674;--admin:#56d4dd;--serializer:#a5d6ff;--beat:#ff9ecd;--middleware:#c9a2ff;--command:#9ae6b4}
+ --form:#f0c674;--admin:#56d4dd;--serializer:#a5d6ff;--beat:#ff9ecd;--middleware:#c9a2ff;--command:#9ae6b4;--consumer:#f778ba}
 body{font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Inter,sans-serif}
 .mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .grid-bg{background:
@@ -139,11 +149,11 @@ body.nav-open #backdrop{display:block}
 const D=JSON.parse(document.getElementById('data').textContent);
 const NS='http://www.w3.org/2000/svg';
 const COLORS={model:'#7ee787',view:'#79c0ff',url:'#ffa657',task:'#d2a8ff',signal:'#ff7b72',
-  form:'#f0c674',admin:'#56d4dd',serializer:'#a5d6ff',beat:'#ff9ecd',middleware:'#c9a2ff',command:'#9ae6b4'};
-const ORDER=['url','view','serializer','form','model','task','beat','signal','middleware','admin','command'];
+  form:'#f0c674',admin:'#56d4dd',serializer:'#a5d6ff',beat:'#ff9ecd',middleware:'#c9a2ff',command:'#9ae6b4',consumer:'#f778ba'};
+const ORDER=['url','view','consumer','serializer','form','model','task','beat','signal','middleware','admin','command'];
 const TITLE={model:'Models',view:'Views',url:'URLs',task:'Celery Tasks',beat:'Beat Schedule',
   signal:'Signals',serializer:'Serializers',form:'Forms',admin:'Admin',
-  middleware:'Middleware',command:'Management Commands'};
+  middleware:'Middleware',command:'Management Commands',consumer:'WebSocket Consumers'};
 const EDGE_LABEL={fk:'ForeignKey',m2m:'ManyToMany',o2o:'OneToOne',routes:'URL → View',
   calls:'task.delay()',schedules:'beat schedule',uses:'uses',queries:'ORM query',
   manages:'admin registers',listens:'signal receiver',inherits:'inherits'};
@@ -151,8 +161,28 @@ const APPHUE=['#79c0ff','#7ee787','#ffa657','#d2a8ff','#ff9ecd','#56d4dd','#f0c6
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const byId=Object.fromEntries(D.nodes.map(n=>[n.id,n]));
 const edges=D.edges.filter(e=>byId[e.source]&&byId[e.target]);
-const apps=D.apps.filter(a=>D.nodes.some(n=>n.app===a));
-const appColor={}; apps.forEach((a,i)=>appColor[a]=APPHUE[i%APPHUE.length]);
+const _hasNodes=a=>D.nodes.some(n=>n.app===a);
+// INSTALLED_APPS order is the project's own declared order - respect it.
+const apps=(D.app_order&&D.app_order.length
+  ? D.app_order.filter(a=>D.apps.includes(a))
+      .concat(D.apps.filter(a=>!D.app_order.includes(a)))
+  : D.apps.slice()).filter(_hasNodes);
+const declaredSet=new Set((D.declared_apps||[]).map(d=>{
+  let p=d.split('.');
+  if(p.length&&/^[A-Z]/.test(p[p.length-1])){p.pop();if(p[p.length-1]==='apps')p.pop();}
+  return p.join('.');}));
+const isDeclared=a=>declaredSet.has(a);
+const appColor={};
+const GROUP_BY=D.group_by||'prefix';
+const appGroup={}, appShort={};
+apps.forEach(a=>{const i=a.lastIndexOf('.');
+  appGroup[a] = (GROUP_BY==='prefix'&&i>0) ? a.slice(0,i) : '';
+  appShort[a] = i>0 ? a.slice(i+1) : a;});
+// colour by group so related apps share a hue family
+const groups=[...new Set(apps.map(a=>appGroup[a]))].sort();
+apps.forEach((a,i)=>{
+  const gi=Math.max(0,groups.indexOf(appGroup[a]));
+  appColor[a]=APPHUE[(gi*3+i)%APPHUE.length];});
 const nodesOf=k=>D.nodes.filter(n=>n.kind===k);
 
 /* ================= health + source links ================= */
@@ -203,12 +233,18 @@ document.getElementById('legend').innerHTML=[
   `<div><i class="inline-block w-5 align-middle mr-2" style="border-top:2px ${d?'dashed':'solid'} ${c}"></i>${EDGE_LABEL[k]}</div>`).join('');
 
 const appsBox=document.getElementById('apps');
+let lastGroup=null;
 apps.forEach(a=>{const st=(D.app_stats||{})[a]||{};
+  if(GROUP_BY==='prefix'&&appGroup[a]!==lastGroup){
+    lastGroup=appGroup[a];
+    if(lastGroup){const hd=document.createElement('div');
+      hd.className='mono text-[9.5px] uppercase tracking-wider text-slate-600 mt-2.5 mb-1 px-1';
+      hd.textContent=lastGroup; appsBox.appendChild(hd);}}
   const r=document.createElement('div');
   r.className='flex items-center gap-2 text-[12.5px] text-slate-400 px-2 py-1.5 rounded-md '+
     'cursor-pointer hover:bg-[#151d26] hover:text-slate-100 transition';
   r.innerHTML=`<span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${appColor[a]}"></span>
-    <span class="truncate">${esc(a)}</span>
+    <span class="truncate" title="${esc(a)}${isDeclared(a)?'':' — not in INSTALLED_APPS'}">${esc(appShort[a])}</span>${isDeclared(a)?'':'<span class="undecl" title="Not listed in INSTALLED_APPS">!</span>'}
     <span class="ml-auto mono text-[10.5px] text-slate-600">${st.total||0}</span>`;
   r.onclick=()=>{onApp.has(a)?onApp.delete(a):onApp.add(a);r.classList.toggle('opacity-30');refresh();saveHash();};
   appsBox.appendChild(r);});
@@ -255,7 +291,8 @@ apps.forEach(app=>{
   b.innerHTML=`<div class="bhead flex items-center gap-2 px-3 py-2.5 border-b border-slate-800
         rounded-t-xl cursor-grab select-none" style="background:linear-gradient(90deg,${col}18,transparent)">
       <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${col}"></span>
-      <span class="mono text-[13px] font-semibold" style="color:${col}">${esc(app)}</span>
+      <span class="mono text-[13px] font-semibold" style="color:${col}"
+        title="${esc(app)}">${esc(appShort[app])}</span>
       <span class="ml-auto mono text-[10px] text-slate-600">${list.length} · ${st.loc||0} loc</span>
       <span class="fold text-slate-600 hover:text-slate-200 cursor-pointer px-0.5">▾</span></div>
     <div class="bbody p-2.5 flex flex-col gap-3"></div>`;
@@ -292,21 +329,60 @@ apps.forEach(app=>{
   world.appendChild(b); boards[app]=b;});
 
 const pos={}; let BW=290; const GAP=30;
+const BANDH=34, BANDGAP=34;
 function calcBW(){
   const w=(stageA.getBoundingClientRect().width||window.innerWidth)-40;
   BW = w<420 ? Math.max(230,w-16) : (w<700?272:290);
   return BW;}
 calcBW();
+// One masonry band per namespace (apps.*, auths.*, core, ...), each with a
+// heading, so groups never bleed into one another.
+const bandEls={};
+function bandEl(g){
+  if(bandEls[g])return bandEls[g];
+  const d=document.createElement('div');
+  d.className='band-label mono';
+  d.innerHTML=`<span class="band-name">${esc(g||'root')}</span>`
+             +`<span class="band-rule"></span>`;
+  world.appendChild(d); bandEls[g]=d; return d;}
+
 function autoLayout(){
   calcBW();
   const avail=(stageA.getBoundingClientRect().width||1200)-40;
   let cols=Math.max(1,Math.floor(avail/(BW+GAP)));
-  cols=Math.min(cols,apps.length);
-  const h=new Array(cols).fill(0);
-  [...apps].sort((a,b)=>boards[b].offsetHeight-boards[a].offsetHeight).forEach(app=>{
-    const c=h.indexOf(Math.min(...h));
-    pos[app]={x:c*(BW+GAP),y:h[c]}; h[c]+=boards[app].offsetHeight+GAP;});}
+  const vis=apps.filter(a=>!boards[a].hidden);
+  cols=Math.max(1,Math.min(cols,vis.length));
+
+  // group -> apps, preserving sidebar order
+  const rank=a=>apps.indexOf(a);
+  const order=[...vis].sort((a,b)=>
+    (appGroup[a]||'\uffff').localeCompare(appGroup[b]||'\uffff')||
+    rank(a)-rank(b));
+  const bands=[]; const seen={};
+  order.forEach(a=>{const g=appGroup[a]||'';
+    if(!(g in seen)){seen[g]=bands.length;bands.push({g,items:[]});}
+    bands[seen[g]].items.push(a);});
+
+  Object.values(bandEls).forEach(e=>e.style.display='none');
+  const single=bands.length<2;
+  let yTop=0;
+  bands.forEach(band=>{
+    let head=null;
+    if(!single){
+      head=bandEl(band.g);
+      head.style.display='flex';
+      head.style.left='0px'; head.style.top=yTop+'px';
+      head.style.width=(cols*(BW+GAP)-GAP)+'px';
+      yTop+=BANDH;}
+    // masonry within this band only
+    const h=new Array(cols).fill(0);
+    band.items.forEach(app=>{
+        const c=h.indexOf(Math.min(...h));
+        pos[app]={x:c*(BW+GAP),y:yTop+h[c]};
+        h[c]+=boards[app].offsetHeight+GAP;});
+    yTop+=Math.max(...h)+BANDGAP;});}
 function place(){apps.forEach(a=>{const b=boards[a];
+  if(!pos[a])return;
   b.style.width=BW+'px';b.style.left=pos[a].x+'px';b.style.top=pos[a].y+'px';});}
 apps.forEach(a=>boards[a].style.width=BW+'px'); autoLayout(); place();
 
@@ -365,8 +441,9 @@ function drawWires(){
     }
     wireEl[i].setAttribute('d',d);
     my=Math.max(my,y1,y2);});
-  const w=Math.max(mx,...apps.map(a=>pos[a].x+BW))+90;
-  const h=Math.max(my,...apps.map(a=>boards[a].hidden?0:pos[a].y+boards[a].offsetHeight))+80;
+  const w=Math.max(mx,...apps.map(a=>pos[a]?pos[a].x+BW:0))+90;
+  const h=Math.max(my,...apps.map(a=>(boards[a].hidden||!pos[a])?0
+    :pos[a].y+boards[a].offsetHeight))+80;
   svg.setAttribute('width',w);svg.setAttribute('height',h);
   world.style.width=w+'px';world.style.height=h+'px';}
 
@@ -637,27 +714,48 @@ function flowRequest(){
         'marker-end':'url(#ah)'},g);});
     return box;}
 
-  const X=[40,300,570,850,1130];
-  const maxN=Math.max(...cols.map(c=>c.items.length),1);
-  laneH=Math.max(maxN*(H+VG)+50,160);
+  // Large projects: wrap tall lanes into sub-columns so the diagram keeps a
+  // readable aspect ratio instead of becoming one very long strip.
+  const PER=Math.max(8,Math.min(18,Math.ceil(Math.max(
+    ...cols.map(c=>c.items.length),1)/Math.ceil(Math.max(
+    ...cols.map(c=>c.items.length),1)/18))));
+  const LANEGAP=34, SUBGAP=10;
+  const laneW=col=>{const sub=Math.max(1,Math.ceil(col.items.length/PER));
+    return sub*colW+(sub-1)*SUBGAP+32;};
+  laneH=Math.max(Math.min(Math.max(...cols.map(c=>c.items.length),1),PER)*(H+VG)+50,160);
+
+  const entryW=150;
+  let x0=40+entryW+LANEGAP;
+  const laneX=[];
+  cols.forEach(col=>{laneX.push(x0); x0+=laneW(col)+LANEGAP;});
+
   cols.forEach((col,ci)=>{
-    lane(g,X[ci]-16,10,colW+32,laneH,col.t,col.c);
+    const lx=laneX[ci];
+    lane(g,lx-16,10,laneW(col),laneH,col.t,col.c);
     col.items.forEach((it,i)=>{
-      const y=44+i*(H+VG);
-      fnode(g,{x:X[ci],y,w:colW,h:H,label:it.label,sub:it.sub,color:col.c,id:it.id});
-      if(it.id)box[it.id]={x:X[ci],y,w:colW,h:H};});});
-  fnode(g,{x:X[0]-16,y:laneH+40,w:150,h:40,label:'HTTP Request',sub:'client',color:'#e2e8f0'});
+      const sub=Math.floor(i/PER), row=i%PER;
+      const x=lx+sub*(colW+SUBGAP), y=44+row*(H+VG);
+      fnode(g,{x,y,w:colW,h:H,label:it.label,sub:it.sub,color:col.c,id:it.id});
+      if(it.id)box[it.id]={x,y,w:colW,h:H};});});
+
+  // entry node sits at the left, vertically centred against the lanes
+  fnode(g,{x:40,y:10+laneH/2-20,w:entryW,h:40,
+    label:'HTTP Request',sub:'client',color:'#e2e8f0'});
+
   edges.forEach(e=>{const a=box[e.source],b=box[e.target];
     if(!a||!b)return;
     if(!['routes','uses','queries'].includes(e.kind))return;
     fedge(g,a.x+a.w,a.y+a.h/2,b.x,b.y+b.h/2,e.kind);});
   const tasks=nodesOf('task').filter(visible);
   if(tasks.length){
-    const ly=laneH+110;
-    lane(g,X[2]-16,ly-34,colW+32,tasks.length*(H+VG)+50,'Async · Celery','#d2a8ff');
-    tasks.forEach((n,i)=>{const y=ly+i*(H+VG);
-      fnode(g,{x:X[2],y,w:colW,h:H,label:n.label,sub:'task',color:'#d2a8ff',id:n.id});
-      box[n.id]={x:X[2],y,w:colW,h:H};});
+    const ly=laneH+110, tsub=Math.max(1,Math.ceil(tasks.length/PER));
+    lane(g,laneX[2]-16,ly-34,tsub*colW+(tsub-1)*SUBGAP+32,
+      Math.min(tasks.length,PER)*(H+VG)+50,'Async · Celery','#d2a8ff');
+    tasks.forEach((n,i)=>{
+      const sub=Math.floor(i/PER), row=i%PER;
+      const x=laneX[2]+sub*(colW+SUBGAP), y=ly+row*(H+VG);
+      fnode(g,{x,y,w:colW,h:H,label:n.label,sub:'task',color:'#d2a8ff',id:n.id});
+      box[n.id]={x,y,w:colW,h:H};});
     edges.filter(e=>e.kind==='calls').forEach(e=>{const a=box[e.source],b=box[e.target];
       if(a&&b)fedge(g,a.x+a.w,a.y+a.h/2,b.x+b.w+12,b.y+b.h/2,'calls');});}
   return box;}
@@ -670,8 +768,9 @@ function flowApps(){
     const ang=-Math.PI/2+i*2*Math.PI/shown.length;
     const st=(D.app_stats||{})[a]||{};
     const w=200,h=64,x=cx+Math.cos(ang)*R-w/2,y=cy+Math.sin(ang)*R-h/2;
-    const gg=fnode(g,{x,y,w,h,label:a,
-      sub:`${st.total||0} nodes · ${st.loc||0} loc`,color:appColor[a],rx:12});
+    const gg=fnode(g,{x,y,w,h,label:appShort[a],
+      sub:`${appGroup[a]?appGroup[a]+' · ':''}${st.total||0} nodes · ${st.loc||0} loc`,
+      color:appColor[a],rx:12});
     const parts=ORDER.filter(k=>st[k]);
     parts.forEach((k,j)=>el('rect',{x:x+14+j*13,y:y+h-13,width:9,height:5,rx:2,
       fill:COLORS[k],opacity:.85},g));

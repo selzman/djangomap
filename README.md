@@ -218,6 +218,9 @@ djangomap [path] [options]
 | `-o, --out FILE` | Output HTML file (default: `djangomap.html`) |
 | `--title TEXT` | Diagram title |
 | `--json FILE` | Also dump the raw graph as JSON |
+| `--apps-only` | Only scan detected Django apps (skip root scripts and config) |
+| `--include-tests` | Also scan `tests/`, `simulation/` and `test_*.py` (excluded by default) |
+| `--group-by {prefix,none}` | Group app boards by path prefix, e.g. `apps.*` / `auths.*` (default: `prefix`) |
 | `--editor NAME` | `vscode` · `vscode-insiders` · `pycharm` · `none` |
 | `--repo-url URL` | e.g. `https://github.com/me/proj` — enables "view on remote" links |
 | `--branch NAME` | Branch for `--repo-url` (default: `main`) |
@@ -357,6 +360,59 @@ Signals (type + `sender`), middleware, management commands, forms, serializers
 | `inherits` | Class inheritance within the project |
 
 ---
+
+## Large and non-standard layouts
+
+djangomap does not assume that every app is a top-level directory with a flat
+`models.py`. It discovers apps structurally, so the following all work:
+
+**Nested app namespaces.** A `src/` root with apps under several packages —
+`apps/crm/`, `auths/users/`, and a bare `core/` — is detected as 32 separate
+apps, not 3. Boards are labelled with the short name and grouped in the sidebar
+by their prefix.
+
+**Apps as packages.** A directory is recognised as an app when it has a
+`migrations/` folder, an `apps.py` declaring an `AppConfig`, or the usual
+module set. Django modules may be **packages instead of files**:
+
+```
+apps/messenger/
+├── models/messenger.py          → models
+├── serializers/_chat_serializer.py  → serializers
+├── apis/_chat_api.py            → views
+├── urls/{regular_url,socket_routing}.py → urls
+└── consumers/messenger.py       → WebSocket consumers
+```
+
+Each file's role is derived from its own name *or* its parent package, so
+`core/models/base.py` and `crm/models.py` are both read as models.
+
+**Channels.** `websocket_urlpatterns` and `AsyncJsonWebsocketConsumer`
+subclasses are extracted as a dedicated `consumer` kind and routed via
+`.as_asgi()`.
+
+**Tests are excluded by default.** A mirrored `src/tests/apps/**` tree, plus
+`test_*.py`, `conftest.py`, `factories.py` and `simulation/`, is skipped so
+fixtures never inflate your model or view counts. Pass `--include-tests` to
+include them.
+
+**`INSTALLED_APPS` drives the layout.** djangomap locates your settings module
+by content, not by a hard-coded path — `settings.py`, `config/settings/base.py`
+and `web_config/environments/common.py` are all found automatically — then
+reads `INSTALLED_APPS` and treats it as the authoritative app list. Entries may
+be plain packages (`core`), dotted (`apps.crm`) or AppConfig paths
+(`billing.apps.BillingConfig`); all resolve to the right directory. Boards are
+ordered exactly as declared, and any app found on disk but *missing* from
+`INSTALLED_APPS` is still shown, flagged with a `!` in the sidebar.
+
+**Boards are partitioned by namespace.** On the Apps tab, each namespace gets
+its own labelled band — `apps`, `auths`, `root` — and masonry packing happens
+*within* a band, so `apps.crm` never ends up sitting next to `core` in the same
+row. Projects with a single namespace get no headings. Use `--group-by none`
+to switch back to one flat grid.
+
+**Wide diagrams stay readable.** On the Flow tab, lanes with many nodes wrap
+into sub-columns rather than stretching into one unreadably long strip.
 
 ## How it works
 

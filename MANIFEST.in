@@ -1,0 +1,4 @@
+prune docs
+prune tests
+exclude .gitignore
+exclude CHANGELOG.md
