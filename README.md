@@ -51,7 +51,7 @@ dependencies and missing `related_name`s along the way.
 ## Quick start
 
 ```bash
-pip install -e ./djangomap
+pip install djangomap
 djangomap /path/to/your/project -o diagram.html
 open diagram.html
 ```
